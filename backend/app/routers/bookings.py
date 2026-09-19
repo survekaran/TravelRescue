@@ -22,7 +22,6 @@ def get_user_trip(
     current_user: User,
     db: Session
 ):
-
     trip = db.query(Trip).filter(
         Trip.id == trip_id,
         Trip.user_id == current_user.id
@@ -38,14 +37,11 @@ def get_user_trip(
 
 
 def booking_to_response(booking: Booking):
-
     depends_on = []
 
     if booking.depends_on:
         try:
-            depends_on = json.loads(
-                booking.depends_on
-            )
+            depends_on = json.loads(booking.depends_on)
         except json.JSONDecodeError:
             depends_on = []
 
@@ -79,7 +75,6 @@ def create_booking(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     get_user_trip(
         trip_id,
         current_user,
@@ -124,7 +119,6 @@ def get_trip_bookings(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     get_user_trip(
         trip_id,
         current_user,
@@ -153,7 +147,6 @@ def get_booking(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     get_user_trip(
         trip_id,
         current_user,
@@ -172,3 +165,36 @@ def get_booking(
         )
 
     return booking_to_response(booking)
+
+
+@router.delete(
+    "/{booking_id}",
+    status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_booking(
+    trip_id: int,
+    booking_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    get_user_trip(
+        trip_id,
+        current_user,
+        db
+    )
+
+    booking = db.query(Booking).filter(
+        Booking.id == booking_id,
+        Booking.trip_id == trip_id
+    ).first()
+
+    if booking is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found"
+        )
+
+    db.delete(booking)
+    db.commit()
+
+    return None

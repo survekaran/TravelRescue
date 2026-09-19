@@ -3,17 +3,16 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.engines.recovery_engine import RecoveryEngine
+from app.engines.impact_engine import ImpactEngine
 from app.models.booking import Booking
 from app.models.disruption import Disruption
 from app.models.trip import Trip
 from app.models.user import User
-from app.schemas.recovery import RecoveryOption, RecoveryPlan
 
 
 router = APIRouter(
-    prefix="/trips/{trip_id}/recovery",
-    tags=["Recovery Engine"]
+    prefix="/trips/{trip_id}/impact",
+    tags=["Impact Engine"]
 )
 
 
@@ -36,18 +35,21 @@ def get_user_trip(
     return trip
 
 
-def get_recovery_engine(
+@router.get("/{disruption_id}")
+def analyze_disruption_impact(
     trip_id: int,
     disruption_id: int,
-    current_user: User,
-    db: Session
-) -> RecoveryEngine:
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Verify trip ownership
     get_user_trip(
         trip_id,
         current_user,
         db
     )
 
+    # Find the disruption belonging to this trip
     disruption = db.query(Disruption).filter(
         Disruption.id == disruption_id,
         Disruption.trip_id == trip_id
@@ -59,53 +61,17 @@ def get_recovery_engine(
             detail="Disruption not found in trip"
         )
 
+    # Load the complete itinerary
     bookings = db.query(Booking).filter(
         Booking.trip_id == trip_id
     ).order_by(
         Booking.start_time.asc()
     ).all()
 
-    return RecoveryEngine(
+    # Run impact analysis
+    engine = ImpactEngine(
         bookings,
         disruption
     )
 
-
-@router.get(
-    "/{disruption_id}",
-    response_model=list[RecoveryOption]
-)
-def generate_recovery_options(
-    trip_id: int,
-    disruption_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    engine = get_recovery_engine(
-        trip_id,
-        disruption_id,
-        current_user,
-        db
-    )
-
-    return engine.generate_options()
-
-
-@router.get(
-    "/{disruption_id}/plans",
-    response_model=list[RecoveryPlan]
-)
-def generate_recovery_plans(
-    trip_id: int,
-    disruption_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    engine = get_recovery_engine(
-        trip_id,
-        disruption_id,
-        current_user,
-        db
-    )
-
-    return engine.generate_plans()
+    return engine.analyze()

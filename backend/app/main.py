@@ -8,10 +8,15 @@ from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.trip import Trip
 from app.models.booking import Booking
+from app.models.disruption import Disruption
 
 from app.routers.auth import router as auth_router
 from app.routers.trips import router as trips_router
 from app.routers.bookings import router as bookings_router
+from app.routers.dependency import router as dependency_router
+from app.routers.disruptions import router as disruptions_router
+from app.routers.impact import router as impact_router
+from app.routers.recovery import router as recovery_router
 
 
 # Create database tables
@@ -30,6 +35,10 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(trips_router)
 app.include_router(bookings_router)
+app.include_router(dependency_router)
+app.include_router(disruptions_router)
+app.include_router(impact_router)
+app.include_router(recovery_router)
 
 
 @app.get("/")
