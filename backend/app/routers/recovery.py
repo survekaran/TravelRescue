@@ -76,6 +76,10 @@ def get_recovery_engine(
     )
 
 
+# =========================================================
+# RECOVERY OPTIONS
+# =========================================================
+
 @router.get(
     "/{disruption_id}",
     response_model=list[RecoveryOption]
@@ -94,8 +98,17 @@ def generate_recovery_options(
         db
     )
 
+    # A resolved disruption should not produce
+    # new recovery options.
+    if engine.disruption.status == "RESOLVED":
+        return []
+
     return engine.generate_options()
 
+
+# =========================================================
+# RECOVERY PLANS
+# =========================================================
 
 @router.get(
     "/{disruption_id}/plans",
@@ -115,8 +128,17 @@ def generate_recovery_plans(
         db
     )
 
+    # Once recovery has been applied, don't generate
+    # another set of recovery plans.
+    if engine.disruption.status == "RESOLVED":
+        return []
+
     return engine.generate_plans()
 
+
+# =========================================================
+# APPLY RECOVERY PLAN
+# =========================================================
 
 @router.post(
     "/{disruption_id}/apply",
@@ -131,7 +153,7 @@ def apply_recovery_plan(
 ):
 
     # ---------------------------------------------------------
-    # 1. Validate trip ownership and disruption
+    # 1. Validate trip ownership
     # ---------------------------------------------------------
 
     get_user_trip(
@@ -139,6 +161,10 @@ def apply_recovery_plan(
         current_user,
         db
     )
+
+    # ---------------------------------------------------------
+    # 2. Find disruption
+    # ---------------------------------------------------------
 
     disruption = db.query(Disruption).filter(
         Disruption.id == disruption_id,
@@ -151,6 +177,10 @@ def apply_recovery_plan(
             detail="Disruption not found in trip"
         )
 
+    # ---------------------------------------------------------
+    # 3. Prevent applying an already-resolved disruption
+    # ---------------------------------------------------------
+
     if disruption.status != "ACTIVE":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -158,7 +188,7 @@ def apply_recovery_plan(
         )
 
     # ---------------------------------------------------------
-    # 2. Regenerate plans from the database
+    # 4. Load current bookings
     # ---------------------------------------------------------
 
     bookings = db.query(Booking).filter(
@@ -171,6 +201,10 @@ def apply_recovery_plan(
         bookings,
         disruption
     )
+
+    # ---------------------------------------------------------
+    # 5. Generate current recovery plans
+    # ---------------------------------------------------------
 
     plans = engine.generate_plans()
 
@@ -191,7 +225,7 @@ def apply_recovery_plan(
         )
 
     # ---------------------------------------------------------
-    # 3. Apply every action
+    # 6. Build booking lookup
     # ---------------------------------------------------------
 
     booking_map = {
@@ -199,6 +233,10 @@ def apply_recovery_plan(
         for booking in bookings
         if booking.external_reference
     }
+
+    # ---------------------------------------------------------
+    # 7. Apply recovery actions
+    # ---------------------------------------------------------
 
     try:
 
@@ -218,6 +256,10 @@ def apply_recovery_plan(
                     )
                 )
 
+            # ---------------------------------------------
+            # RESCHEDULE
+            # ---------------------------------------------
+
             if action.action == "RESCHEDULE":
 
                 if action.proposed_start_time is not None:
@@ -230,9 +272,17 @@ def apply_recovery_plan(
                         action.proposed_end_time
                     )
 
+            # ---------------------------------------------
+            # REPLACE
+            # ---------------------------------------------
+
             elif action.action == "REPLACE":
 
                 booking.status = "REPLACED"
+
+            # ---------------------------------------------
+            # UNKNOWN ACTION
+            # ---------------------------------------------
 
             else:
                 raise HTTPException(
@@ -244,14 +294,21 @@ def apply_recovery_plan(
                 )
 
         # -----------------------------------------------------
-        # 4. Mark disruption as resolved
+        # 8. Mark disruption resolved
         # -----------------------------------------------------
 
         disruption.status = "RESOLVED"
 
+        # -----------------------------------------------------
+        # 9. Save transaction
+        # -----------------------------------------------------
+
         db.commit()
 
-        # Refresh affected records
+        # -----------------------------------------------------
+        # 10. Refresh database objects
+        # -----------------------------------------------------
+
         for booking in bookings:
             db.refresh(booking)
 
@@ -268,7 +325,5 @@ def apply_recovery_plan(
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                "Failed to apply recovery plan"
-            )
+            detail="Failed to apply recovery plan"
         ) from exc
