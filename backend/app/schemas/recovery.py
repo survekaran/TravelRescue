@@ -7,13 +7,17 @@ class RecoveryOption(BaseModel):
     option_id: str
     action: str
     booking_reference: str
+
     original_start_time: datetime | None = None
     original_end_time: datetime | None = None
+
     proposed_start_time: datetime | None = None
     proposed_end_time: datetime | None = None
+
     cost_difference: float = 0.0
     additional_delay_minutes: int = 0
     bookings_changed: int = 0
+
     feasible: bool = True
     explanation: str
 
@@ -38,11 +42,11 @@ class RecoveryAction(BaseModel):
 
 class RecoveryPlan(BaseModel):
     """
-    A complete recovery plan containing one or more booking changes.
+    A complete recovery plan containing one or more
+    booking changes.
     """
 
     plan_id: str
-
     actions: list[RecoveryAction]
 
     cost_difference: float = 0.0
@@ -50,5 +54,12 @@ class RecoveryPlan(BaseModel):
     bookings_changed: int = 0
 
     feasible: bool = True
-
     explanation: str
+
+
+class ApplyRecoveryPlanRequest(BaseModel):
+    """
+    Request to apply a generated recovery plan.
+    """
+
+    plan_id: str
