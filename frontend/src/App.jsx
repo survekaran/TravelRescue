@@ -3528,28 +3528,7 @@ function Dashboard({ auth, onLogout }) {
         .filter((item) => item.status === "ACTIVE")
         .sort((a, b) => b.id - a.id);
 
-      function handleTripSelected(trip) {
-    if (!trip?.id) return;
-
-    setError("");
-    setSuccessMessage("");
-    setTripInfo(trip);
-    setTripId(trip.id);
-    setActivePage("dashboard");
-  }
-
-  function handleTripDeleted() {
-    setTripId(null);
-    setTripInfo(null);
-    setBookings([]);
-    setDisruptions([]);
-    setImpact(null);
-    setPlans([]);
-    setSelectedPlanId(null);
-    setActivePage("trips");
-  }
-
-  const targetDisruption =
+      const targetDisruption =
         activeDisruptions[0] ||
         [...nextDisruptions].sort((a, b) => b.id - a.id)[0];
 
@@ -3605,6 +3584,28 @@ function Dashboard({ auth, onLogout }) {
       setLoading(false);
       setRefreshing(false);
     }
+  }
+
+
+  function handleTripSelected(trip) {
+    if (!trip?.id) return;
+
+    setError("");
+    setSuccessMessage("");
+    setTripInfo(trip);
+    setTripId(trip.id);
+    setActivePage("dashboard");
+  }
+
+  function handleTripDeleted() {
+    setTripId(null);
+    setTripInfo(null);
+    setBookings([]);
+    setDisruptions([]);
+    setImpact(null);
+    setPlans([]);
+    setSelectedPlanId(null);
+    setActivePage("trips");
   }
 
   // Load the user's trips first.
@@ -4354,4 +4355,3 @@ function App() {
 }
 
 export default App;
-
