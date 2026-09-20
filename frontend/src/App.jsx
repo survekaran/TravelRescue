@@ -11,7 +11,7 @@ const STORAGE_KEY = "travelrescue_auth";
 
 function getStoredAuth() {
   try {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY);
     return stored ? JSON.parse(stored) : null;
   } catch {
     return null;
