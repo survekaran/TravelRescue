@@ -18,18 +18,30 @@ from app.routers.dependency import router as dependency_router
 from app.routers.disruptions import router as disruptions_router
 from app.routers.impact import router as impact_router
 from app.routers.recovery import router as recovery_router
+from app.routers.monitor import router as monitor_router
 
 
-# Create database tables
+# =========================================================
+# DATABASE
+# =========================================================
+
 Base.metadata.create_all(bind=engine)
 
 
-# Create FastAPI application
+# =========================================================
+# FASTAPI APPLICATION
+# =========================================================
+
 app = FastAPI(
     title="TravelRescue API",
     description="AI-powered travel disruption recovery platform",
-    version="1.0.0"
+    version="1.0.0",
 )
+
+
+# =========================================================
+# CORS
+# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,7 +55,10 @@ app.add_middleware(
 )
 
 
-# Register routers
+# =========================================================
+# ROUTERS
+# =========================================================
+
 app.include_router(auth_router)
 app.include_router(trips_router)
 app.include_router(bookings_router)
@@ -51,29 +66,41 @@ app.include_router(dependency_router)
 app.include_router(disruptions_router)
 app.include_router(impact_router)
 app.include_router(recovery_router)
+app.include_router(monitor_router)
 
+
+# =========================================================
+# ROOT
+# =========================================================
 
 @app.get("/")
 def root():
     return {
         "message": "TravelRescue API is running!",
         "version": "1.0.0",
-        "status": "online"
+        "status": "online",
     }
 
+
+# =========================================================
+# HEALTH CHECK
+# =========================================================
 
 @app.get("/health")
 def health_check():
     return {
-        "status": "healthy"
+        "status": "healthy",
     }
 
 
+# =========================================================
+# DATABASE HEALTH
+# =========================================================
+
 @app.get("/health/database")
 def database_health(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
     result = db.execute(
         text("SELECT 1")
     )
@@ -82,18 +109,21 @@ def database_health(
 
     return {
         "database": "connected",
-        "test": value
+        "test": value,
     }
 
 
+# =========================================================
+# CURRENT USER
+# =========================================================
+
 @app.get("/auth/me")
 def get_me(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-
     return {
         "id": current_user.id,
         "name": current_user.name,
         "email": current_user.email,
-        "role": current_user.role
+        "role": current_user.role,
     }

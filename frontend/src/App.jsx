@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 import "./App.css";
 
 const API_BASE = "http://127.0.0.1:8000";
@@ -302,6 +304,37 @@ function formatDuration(minutes) {
   return `${hours}h ${mins}m`;
 }
 
+function getUpdatedDisruptionTime(disruption) {
+  const delayMinutes = Number(disruption?.delay_minutes || 0);
+  const originalValue = disruption?.old_start_time;
+  const providerValue = disruption?.new_start_time;
+
+  if (!originalValue) return providerValue || null;
+  if (!delayMinutes) return providerValue || originalValue;
+
+  const originalDate = new Date(originalValue);
+  const providerDate = providerValue ? new Date(providerValue) : null;
+
+  if (Number.isNaN(originalDate.getTime())) {
+    return providerValue || originalValue;
+  }
+
+  // Some provider responses report the original scheduled timestamp while
+  // separately reporting the delay in minutes. In that case, calculate the
+  // displayed updated time so the dashboard does not show identical times.
+  if (
+    !providerDate ||
+    Number.isNaN(providerDate.getTime()) ||
+    Math.abs(providerDate.getTime() - originalDate.getTime()) < 60 * 1000
+  ) {
+    return new Date(
+      originalDate.getTime() + delayMinutes * 60 * 1000
+    ).toISOString();
+  }
+
+  return providerValue;
+}
+
 function getBookingStatusClass(status) {
   if (status === "REPLACED") return "booking-status-warning";
   if (status === "CANCELLED") return "booking-status-danger";
@@ -431,7 +464,7 @@ function Sidebar({ activePage, setActivePage, user, onLogout }) {
    TOPBAR
 ========================================================= */
 
-function Topbar({ onRefresh, refreshing, user }) {
+function Topbar({ onRefresh, refreshing, onMonitor, monitoring, user }) {
   return (
     <header className="main-topbar">
       <div className="mobile-brand">
@@ -452,10 +485,20 @@ function Topbar({ onRefresh, refreshing, user }) {
         </div>
 
         <button
+          className="live-monitor-button"
+          title="Check live flight status"
+          onClick={onMonitor}
+          disabled={monitoring || refreshing}
+        >
+          <span>◉</span>
+          {monitoring ? "Checking..." : "Check live status"}
+        </button>
+
+        <button
           className="icon-button"
           title="Refresh"
           onClick={onRefresh}
-          disabled={refreshing}
+          disabled={refreshing || monitoring}
         >
           {refreshing ? "…" : "↻"}
         </button>
@@ -625,6 +668,7 @@ function DisruptionCard({ disruption, flight, impact }) {
   }
 
   const resolved = disruption.status === "RESOLVED";
+  const updatedStartTime = getUpdatedDisruptionTime(disruption);
 
   return (
     <section
@@ -689,8 +733,8 @@ function DisruptionCard({ disruption, flight, impact }) {
 
         <div className="changed-time">
           <small>UPDATED</small>
-          <strong>{formatTime(disruption.new_start_time)}</strong>
-          <span>{formatDateTime(disruption.new_start_time)}</span>
+          <strong>{formatTime(updatedStartTime)}</strong>
+          <span>{formatDateTime(updatedStartTime)}</span>
         </div>
 
         <div className="delay-badge">
@@ -923,6 +967,11 @@ function ItinerarySection({
 ========================================================= */
 
 function JourneyMap({ flight, transfer, hotel }) {
+  // Airport coordinates are used as the visual route anchors. The booking
+  // data still controls the labels shown in the route information card.
+  const mumbai = [19.0896, 72.8656];
+  const rome = [41.7999, 12.2462];
+
   return (
     <section className="content-card journey-map-card">
       <div className="card-header">
@@ -937,38 +986,86 @@ function JourneyMap({ flight, transfer, hotel }) {
         </span>
       </div>
 
-      <div className="fake-map">
-        <div className="map-grid" />
+      <div
+        className="real-map"
+        style={{
+          height: "330px",
+          width: "100%",
+          borderRadius: "18px",
+          overflow: "hidden",
+          position: "relative",
+          zIndex: 0,
+        }}
+      >
+        <MapContainer
+          center={[30.5, 66.5]}
+          zoom={3}
+          minZoom={2}
+          maxZoom={7}
+          scrollWheelZoom={false}
+          style={{ height: "100%", width: "100%" }}
+        >
+          <TileLayer
+            attribution='&copy; OpenStreetMap contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
 
-        <div className="map-land land-one" />
-        <div className="map-land land-two" />
-        <div className="map-land land-three" />
+          <Polyline
+            positions={[mumbai, rome]}
+            pathOptions={{
+              color: "#2563eb",
+              weight: 4,
+              opacity: 0.85,
+              dashArray: "8 8",
+            }}
+          />
 
-        <div className="map-route">
-          <span className="map-point point-mumbai">
-            <i />
-            <strong>Mumbai</strong>
-          </span>
+          <CircleMarker
+            center={mumbai}
+            radius={9}
+            pathOptions={{
+              color: "#ffffff",
+              weight: 3,
+              fillColor: "#2563eb",
+              fillOpacity: 1,
+            }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} permanent>
+              Mumbai
+            </Tooltip>
+          </CircleMarker>
 
-          <span className="map-flight">
-            ✈
-          </span>
+          <CircleMarker
+            center={rome}
+            radius={9}
+            pathOptions={{
+              color: "#ffffff",
+              weight: 3,
+              fillColor: "#16a34a",
+              fillOpacity: 1,
+            }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} permanent>
+              Rome
+            </Tooltip>
+          </CircleMarker>
+        </MapContainer>
 
-          <span className="map-point point-rome">
-            <i />
-            <strong>Rome</strong>
-          </span>
-        </div>
-
-        <div className="map-info-card">
+        <div
+          className="map-info-card"
+          style={{
+            position: "absolute",
+            left: "14px",
+            bottom: "14px",
+            zIndex: 1000,
+          }}
+        >
           <span>ACTIVE ROUTE</span>
           <strong>
-            {flight?.location || "Mumbai"} →{" "}
-            {flight?.destination || "Rome"}
+            {flight?.location || "Mumbai"} → {flight?.destination || "Rome"}
           </strong>
           <small>
-            {transfer?.name || "Airport transfer"} ·{" "}
-            {hotel?.name || "Hotel"}
+            {transfer?.name || "Airport transfer"} · {hotel?.name || "Hotel"}
           </small>
         </div>
       </div>
@@ -1398,6 +1495,7 @@ function Dashboard({ auth, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  const [monitoring, setMonitoring] = useState(false);
   const [applying, setApplying] = useState(false);
 
   const [error, setError] = useState("");
@@ -1573,6 +1671,65 @@ function Dashboard({ auth, onLogout }) {
     }
   }
 
+  async function monitorTrip() {
+    try {
+      setMonitoring(true);
+      setError("");
+      setSuccessMessage("");
+
+      const result = await apiRequest(
+        `/trips/${TRIP_ID}/monitor`,
+        { method: "POST" }
+      );
+
+      const disruptedResult = (result?.results || []).find(
+        (item) => item.disrupted
+      );
+
+      if (result?.new_disruptions > 0 && disruptedResult) {
+        setSuccessMessage(
+          `${disruptedResult.flight_number}: ${
+            disruptedResult.delay_minutes || 0
+          }-minute ${
+            disruptedResult.disruption_type === "FLIGHT_DELAY"
+              ? "delay"
+              : "disruption"
+          } detected. Impact analysis has been refreshed.`
+        );
+      } else if (disruptedResult) {
+        setSuccessMessage(
+          `${disruptedResult.flight_number}: current provider status shows a ${
+            disruptedResult.delay_minutes || 0
+          }-minute delay. The existing disruption is already being tracked.`
+        );
+      } else if (result?.checked_bookings > 0) {
+        setSuccessMessage(
+          "Live flight check completed. All monitored flights are currently operating normally."
+        );
+      } else {
+        setSuccessMessage(
+          "Live flight check completed. No flight bookings were available to monitor."
+        );
+      }
+
+      await loadDashboard(true);
+    } catch (err) {
+      console.error(err);
+
+      if (err.status === 401) {
+        localStorage.removeItem(STORAGE_KEY);
+        onLogout();
+        return;
+      }
+
+      setError(
+        err.message || "Unable to check live flight status."
+      );
+    } finally {
+      setMonitoring(false);
+    }
+  }
+
   async function applyRecoveryPlan() {
     if (!targetDisruption || !selectedPlan) return;
 
@@ -1639,6 +1796,8 @@ function Dashboard({ auth, onLogout }) {
         <Topbar
           onRefresh={() => loadDashboard(true)}
           refreshing={refreshing}
+          onMonitor={monitorTrip}
+          monitoring={monitoring}
           user={auth?.user}
         />
 
