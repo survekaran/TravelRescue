@@ -6,7 +6,6 @@ import "./App.css";
 // Vite exposes only variables prefixed with VITE_; this one is deliberately
 // public and must contain only the API's public origin.
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
-const TRIP_ID = 1;
 const STORAGE_KEY = "travelrescue_auth";
 
 function getStoredAuth() {
@@ -1602,7 +1601,7 @@ function DatePickerField({ label, value, onChange }) {
 }
 
 
-function TripsPage({ onOpenDashboard }) {
+function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDeleted }) {
   const [trips, setTrips] = useState([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -1689,6 +1688,10 @@ function TripsPage({ onOpenDashboard }) {
       });
 
       setTrips((current) => [...current, createdTrip]);
+
+      // Newly created trips become the active journey immediately.
+      onTripSelected(createdTrip);
+
       setForm({
         name: "",
         origin: "",
@@ -1717,7 +1720,13 @@ function TripsPage({ onOpenDashboard }) {
       await apiRequest(`/trips/${tripId}`, {
         method: "DELETE",
       });
+
       setTrips((current) => current.filter((item) => item.id !== tripId));
+
+      if (tripId === activeTripId && onTripDeleted) {
+        onTripDeleted();
+      }
+
       setSuccess("Trip deleted successfully.");
     } catch (err) {
       setError(
@@ -2032,7 +2041,7 @@ function TripsPage({ onOpenDashboard }) {
                       flexShrink: 0,
                     }}
                   >
-                    {trip.id === TRIP_ID ? (
+                    {trip.id === activeTripId ? (
                       <button
                         type="button"
                         className="return-dashboard-button"
@@ -2044,26 +2053,23 @@ function TripsPage({ onOpenDashboard }) {
                       <button
                         type="button"
                         className="view-all-button"
-                        onClick={() =>
-                          setSuccess(
-                            `Trip #${trip.id} is ready for booking setup.`
-                          )
-                        }
+                        onClick={() => {
+                          onTripSelected(trip);
+                          onOpenDashboard();
+                        }}
                       >
                         Manage
                       </button>
                     )}
 
-                    {trip.id !== TRIP_ID && (
-                      <button
-                        type="button"
-                        className="view-all-button"
-                        onClick={() => handleDeleteTrip(trip.id)}
-                        style={{ color: "#b91c1c" }}
-                      >
-                        Delete
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="view-all-button"
+                      onClick={() => handleDeleteTrip(trip.id)}
+                      style={{ color: "#b91c1c" }}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
                 </div>
@@ -3466,6 +3472,9 @@ function DisruptionsPage({
 ========================================================= */
 
 function Dashboard({ auth, onLogout }) {
+  const [tripId, setTripId] = useState(null);
+  const [tripInfo, setTripInfo] = useState(null);
+
   const [bookings, setBookings] = useState([]);
   const [disruptions, setDisruptions] = useState([]);
   const [impact, setImpact] = useState(null);
@@ -3484,6 +3493,17 @@ function Dashboard({ auth, onLogout }) {
   const [successMessage, setSuccessMessage] = useState("");
 
   async function loadDashboard(showRefresh = false) {
+    if (!tripId) {
+      setBookings([]);
+      setDisruptions([]);
+      setImpact(null);
+      setPlans([]);
+      setSelectedPlanId(null);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       if (showRefresh) {
         setRefreshing(true);
@@ -3494,8 +3514,8 @@ function Dashboard({ auth, onLogout }) {
       setError("");
 
       const [bookingData, disruptionData] = await Promise.all([
-        apiRequest(`/trips/${TRIP_ID}/bookings`),
-        apiRequest(`/trips/${TRIP_ID}/disruptions`),
+        apiRequest(`/trips/${tripId}/bookings`),
+        apiRequest(`/trips/${tripId}/disruptions`),
       ]);
 
       const nextBookings = bookingData || [];
@@ -3508,7 +3528,28 @@ function Dashboard({ auth, onLogout }) {
         .filter((item) => item.status === "ACTIVE")
         .sort((a, b) => b.id - a.id);
 
-      const targetDisruption =
+      function handleTripSelected(trip) {
+    if (!trip?.id) return;
+
+    setError("");
+    setSuccessMessage("");
+    setTripInfo(trip);
+    setTripId(trip.id);
+    setActivePage("dashboard");
+  }
+
+  function handleTripDeleted() {
+    setTripId(null);
+    setTripInfo(null);
+    setBookings([]);
+    setDisruptions([]);
+    setImpact(null);
+    setPlans([]);
+    setSelectedPlanId(null);
+    setActivePage("trips");
+  }
+
+  const targetDisruption =
         activeDisruptions[0] ||
         [...nextDisruptions].sort((a, b) => b.id - a.id)[0];
 
@@ -3520,13 +3561,13 @@ function Dashboard({ auth, onLogout }) {
       }
 
       const impactRequest = apiRequest(
-        `/trips/${TRIP_ID}/impact/${targetDisruption.id}`
+        `/trips/${tripId}/impact/${targetDisruption.id}`
       );
 
       const recoveryRequest =
         targetDisruption.status === "ACTIVE"
           ? apiRequest(
-              `/trips/${TRIP_ID}/recovery/${targetDisruption.id}/plans`
+              `/trips/${tripId}/recovery/${targetDisruption.id}/plans`
             )
           : Promise.resolve([]);
 
@@ -3566,9 +3607,66 @@ function Dashboard({ auth, onLogout }) {
     }
   }
 
+  // Load the user's trips first.
+  // The first active trip becomes the selected journey.
   useEffect(() => {
-    loadDashboard();
+    let cancelled = false;
+
+    async function initializeTrip() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const trips = await apiRequest("/trips");
+
+        if (cancelled) return;
+
+        const availableTrips = Array.isArray(trips) ? trips : [];
+
+        const selected =
+          availableTrips.find((trip) => trip.status === "ACTIVE") ||
+          availableTrips[0] ||
+          null;
+
+        if (!selected) {
+          setTripId(null);
+          setTripInfo(null);
+          setActivePage("trips");
+          setLoading(false);
+          return;
+        }
+
+        setTripInfo(selected);
+        setTripId(selected.id);
+      } catch (err) {
+        if (cancelled) return;
+
+        console.error(err);
+
+        if (err.status === 401) {
+          localStorage.removeItem(STORAGE_KEY);
+          onLogout();
+          return;
+        }
+
+        setError(err.message || "Unable to load your trips.");
+        setLoading(false);
+      }
+    }
+
+    initializeTrip();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Whenever the selected trip changes, load its data.
+  useEffect(() => {
+    if (tripId) {
+      loadDashboard();
+    }
+  }, [tripId]);
 
   const targetDisruption =
     disruptions
@@ -3615,7 +3713,7 @@ function Dashboard({ auth, onLogout }) {
       setSuccessMessage("");
 
       const result = await apiRequest(
-        `/trips/${TRIP_ID}/disruptions/test`,
+        `/trips/${tripId}/disruptions/test`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -3660,7 +3758,7 @@ function Dashboard({ auth, onLogout }) {
       setSuccessMessage("");
 
       const result = await apiRequest(
-        `/trips/${TRIP_ID}/monitor`,
+        `/trips/${tripId}/monitor`,
         { method: "POST" }
       );
 
@@ -3721,7 +3819,7 @@ function Dashboard({ auth, onLogout }) {
       setSuccessMessage("");
 
       await apiRequest(
-        `/trips/${TRIP_ID}/recovery/${targetDisruption.id}/apply`,
+        `/trips/${tripId}/recovery/${targetDisruption.id}/apply`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -3807,7 +3905,12 @@ function Dashboard({ auth, onLogout }) {
           )}
 
           {activePage === "trips" && (
-            <TripsPage onOpenDashboard={() => setActivePage("dashboard")} />
+            <TripsPage
+              activeTripId={tripId}
+              onTripSelected={handleTripSelected}
+              onTripDeleted={handleTripDeleted}
+              onOpenDashboard={() => setActivePage("dashboard")}
+            />
           )}
 
           {activePage === "live" && (
@@ -3975,6 +4078,7 @@ function Dashboard({ auth, onLogout }) {
           {activePage === "settings" && (
             <SettingsPage
               user={auth?.user}
+              tripInfo={tripInfo}
               onLogout={onLogout}
               onOpenDashboard={() => setActivePage("dashboard")}
             />
@@ -4057,7 +4161,7 @@ function Dashboard({ auth, onLogout }) {
                 </div>
 
                 <div>
-                  <span>Trip #{TRIP_ID}</span>
+                  <span>{tripId ? `Trip #${tripId}` : "No active trip"}</span>
                   <span>•</span>
                   <span>
                     Signed in as {auth?.user?.name || "Traveler"}
@@ -4078,7 +4182,7 @@ function Dashboard({ auth, onLogout }) {
    SETTINGS PAGE
 ========================================================= */
 
-function SettingsPage({ user, onLogout, onOpenDashboard }) {
+function SettingsPage({ user, tripInfo, onLogout, onOpenDashboard }) {
   const [notifications, setNotifications] = useState(true);
   const [liveMonitoring, setLiveMonitoring] = useState(true);
   const [recoveryAlerts, setRecoveryAlerts] = useState(true);
@@ -4157,8 +4261,14 @@ function SettingsPage({ user, onLogout, onOpenDashboard }) {
             <div style={{ display: "grid", gap: 12 }}>
               <div style={{ padding: 14, borderRadius: 12, background: "#f7f9fc" }}>
                 <small className="small-label">ACTIVE TRIP</small>
-                <strong style={{ display: "block", marginTop: 5 }}>Rome Journey</strong>
-                <span style={{ color: "#718096", fontSize: 13 }}>DEL → FCO · Trip #{TRIP_ID}</span>
+                <strong style={{ display: "block", marginTop: 5 }}>
+                  {tripInfo?.name || "No active trip"}
+                </strong>
+                <span style={{ color: "#718096", fontSize: 13 }}>
+                  {tripInfo
+                    ? `${tripInfo.origin} → ${tripInfo.destination} · Trip #${tripInfo.id}`
+                    : "Create a trip to begin"}
+                </span>
               </div>
               <div style={{ padding: 14, borderRadius: 12, background: "#f7f9fc" }}>
                 <small className="small-label">RECOVERY MODE</small>
