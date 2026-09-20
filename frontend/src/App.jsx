@@ -8,6 +8,66 @@ import "./App.css";
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 const STORAGE_KEY = "travelrescue_auth";
 
+// Common city / airport coordinates used by the prototype map.
+// Trip labels remain user-controlled; these coordinates are only visual
+// anchors for locations the prototype knows. Unknown locations simply render
+// without a map route instead of falling back to demo data.
+const LOCATION_COORDINATES = {
+  Mumbai: [19.0896, 72.8656],
+  BOM: [19.0896, 72.8656],
+  Delhi: [28.5562, 77.1000],
+  DEL: [28.5562, 77.1000],
+  London: [51.4700, -0.4543],
+  LHR: [51.4700, -0.4543],
+  Rome: [41.7999, 12.2462],
+  FCO: [41.7999, 12.2462],
+  Dubai: [25.2532, 55.3657],
+  DXB: [25.2532, 55.3657],
+  Paris: [49.0097, 2.5479],
+  CDG: [49.0097, 2.5479],
+  Singapore: [1.3644, 103.9915],
+  SIN: [1.3644, 103.9915],
+  Bangkok: [13.6900, 100.7501],
+  BKK: [13.6900, 100.7501],
+  New_York: [40.6413, -73.7781],
+  JFK: [40.6413, -73.7781],
+  Amsterdam: [52.3105, 4.7683],
+  AMS: [52.3105, 4.7683],
+  Frankfurt: [50.0379, 8.5622],
+  FRA: [50.0379, 8.5622],
+  Istanbul: [41.2753, 28.7519],
+  IST: [41.2753, 28.7519],
+  Doha: [25.2731, 51.6081],
+  DOH: [25.2731, 51.6081],
+  Tokyo: [35.5494, 139.7798],
+  HND: [35.5494, 139.7798],
+  Sydney: [-33.9399, 151.1753],
+  SYD: [-33.9399, 151.1753],
+};
+
+function getLocationCoordinates(value) {
+  if (!value) return null;
+
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+
+  if (LOCATION_COORDINATES[normalized]) {
+    return LOCATION_COORDINATES[normalized];
+  }
+
+  const upper = normalized.toUpperCase();
+  if (LOCATION_COORDINATES[upper]) {
+    return LOCATION_COORDINATES[upper];
+  }
+
+  const titleCase = normalized
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+  return LOCATION_COORDINATES[titleCase] || null;
+}
+
+
 function getStoredAuth() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -211,8 +271,8 @@ function LoginScreen({ onLogin }) {
             </div>
 
             <div className="mini-route-bottom">
-              <span>Mumbai</span>
-              <span>Rome</span>
+              <span>MUM</span>
+              <span>FCO</span>
             </div>
           </div>
         </div>
@@ -621,19 +681,22 @@ function Topbar({ onRefresh, refreshing, onMonitor, monitoring, user }) {
 function TripHero({
   bookings,
   flight,
+  tripInfo,
   targetDisruption,
   onSimulate,
   simulating,
   applying,
 }) {
-  const origin =
+  const originName =
+    tripInfo?.origin ||
     flight?.location ||
     flight?.origin ||
-    "Mumbai";
+    "";
 
-  const destination =
+  const destinationName =
+    tripInfo?.destination ||
     flight?.destination ||
-    "Rome";
+    "";
 
   return (
     <section className="trip-hero">
@@ -648,9 +711,13 @@ function TripHero({
         </div>
 
         <h1>
-          {origin}
-          <span className="hero-arrow">→</span>
-          {destination}
+          {originName || "No active trip"}
+          {originName && destinationName && (
+            <>
+              <span className="hero-arrow">→</span>
+              {destinationName}
+            </>
+          )}
         </h1>
 
         <p>
@@ -710,8 +777,8 @@ function TripHero({
         </div>
 
         <div className="route-labels">
-          <strong>Mumbai</strong>
-          <span>Rome</span>
+          <strong>{originName || "No origin"}</strong>
+          <span>{destinationName || "No destination"}</span>
         </div>
       </div>
 
@@ -740,7 +807,7 @@ function TripHero({
    DISRUPTION CARD
 ========================================================= */
 
-function DisruptionCard({ disruption, flight, impact }) {
+function DisruptionCard({ disruption, flight, impact, tripInfo }) {
   if (!disruption) {
     return (
       <section className="no-disruption-card">
@@ -803,11 +870,11 @@ function DisruptionCard({ disruption, flight, impact }) {
           </p>
 
           <div className="disruption-flight">
-            <strong>{flight?.external_reference || "AI101"}</strong>
+            <strong>{flight?.external_reference || "No flight"}</strong>
             <span>
-              {flight?.name || "International flight"} ·{" "}
-              {flight?.location || "Mumbai"} →{" "}
-              {flight?.destination || "Rome"}
+              {flight?.name || "No active flight"} ·{" "}
+              {tripInfo?.origin || flight?.location || "Unknown"} →{" "}
+              {tripInfo?.destination || flight?.destination || "Unknown"}
             </span>
           </div>
         </div>
@@ -1057,11 +1124,30 @@ function ItinerarySection({
    JOURNEY MAP
 ========================================================= */
 
-function JourneyMap({ flight, transfer, hotel }) {
-  // Airport coordinates are used as the visual route anchors. The booking
-  // data still controls the labels shown in the route information card.
-  const mumbai = [19.0896, 72.8656];
-  const rome = [41.7999, 12.2462];
+function JourneyMap({ flight, transfer, hotel, tripInfo }) {
+  const originName =
+    tripInfo?.origin ||
+    flight?.location ||
+    flight?.origin ||
+    "";
+
+  const destinationName =
+    tripInfo?.destination ||
+    flight?.destination ||
+    "";
+
+  const originCoordinates = getLocationCoordinates(originName);
+  const destinationCoordinates = getLocationCoordinates(destinationName);
+
+  const mapCenter =
+    originCoordinates && destinationCoordinates
+      ? [
+          (originCoordinates[0] + destinationCoordinates[0]) / 2,
+          (originCoordinates[1] + destinationCoordinates[1]) / 2,
+        ]
+      : originCoordinates || destinationCoordinates || [20, 78];
+
+  const hasRoute = Boolean(originCoordinates && destinationCoordinates);
 
   return (
     <section className="content-card journey-map-card">
@@ -1089,8 +1175,9 @@ function JourneyMap({ flight, transfer, hotel }) {
         }}
       >
         <MapContainer
-          center={[30.5, 66.5]}
-          zoom={3}
+          key={`${originName}-${destinationName}`}
+          center={mapCenter}
+          zoom={hasRoute ? 4 : 3}
           minZoom={2}
           maxZoom={7}
           scrollWheelZoom={false}
@@ -1101,45 +1188,49 @@ function JourneyMap({ flight, transfer, hotel }) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          <Polyline
-            positions={[mumbai, rome]}
-            pathOptions={{
-              color: "#2563eb",
-              weight: 4,
-              opacity: 0.85,
-              dashArray: "8 8",
-            }}
-          />
+          {hasRoute && (
+            <>
+              <Polyline
+                positions={[originCoordinates, destinationCoordinates]}
+                pathOptions={{
+                  color: "#2563eb",
+                  weight: 4,
+                  opacity: 0.85,
+                  dashArray: "8 8",
+                }}
+              />
 
-          <CircleMarker
-            center={mumbai}
-            radius={9}
-            pathOptions={{
-              color: "#ffffff",
-              weight: 3,
-              fillColor: "#2563eb",
-              fillOpacity: 1,
-            }}
-          >
-            <Tooltip direction="top" offset={[0, -8]} permanent>
-              Mumbai
-            </Tooltip>
-          </CircleMarker>
+              <CircleMarker
+                center={originCoordinates}
+                radius={9}
+                pathOptions={{
+                  color: "#ffffff",
+                  weight: 3,
+                  fillColor: "#2563eb",
+                  fillOpacity: 1,
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -8]} permanent>
+                  {originName}
+                </Tooltip>
+              </CircleMarker>
 
-          <CircleMarker
-            center={rome}
-            radius={9}
-            pathOptions={{
-              color: "#ffffff",
-              weight: 3,
-              fillColor: "#16a34a",
-              fillOpacity: 1,
-            }}
-          >
-            <Tooltip direction="top" offset={[0, -8]} permanent>
-              Rome
-            </Tooltip>
-          </CircleMarker>
+              <CircleMarker
+                center={destinationCoordinates}
+                radius={9}
+                pathOptions={{
+                  color: "#ffffff",
+                  weight: 3,
+                  fillColor: "#16a34a",
+                  fillOpacity: 1,
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -8]} permanent>
+                  {destinationName}
+                </Tooltip>
+              </CircleMarker>
+            </>
+          )}
         </MapContainer>
 
         <div
@@ -1152,9 +1243,13 @@ function JourneyMap({ flight, transfer, hotel }) {
           }}
         >
           <span>ACTIVE ROUTE</span>
+
           <strong>
-            {flight?.location || "Mumbai"} → {flight?.destination || "Rome"}
+            {originName && destinationName
+              ? `${originName} → ${destinationName}`
+              : "No active route"}
           </strong>
+
           <small>
             {transfer?.name || "Airport transfer"} · {hotel?.name || "Hotel"}
           </small>
@@ -1854,7 +1949,7 @@ function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDelete
                 <span className="small-label">ORIGIN</span>
                 <input
                   type="text"
-                  placeholder="Mumbai"
+                  placeholder="e.g. Mumbai"
                   value={form.origin}
                   onChange={(event) =>
                     updateField("origin", event.target.value)
@@ -1867,7 +1962,7 @@ function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDelete
                 <span className="small-label">DESTINATION</span>
                 <input
                   type="text"
-                  placeholder="Rome"
+                  placeholder="e.g. Rome"
                   value={form.destination}
                   onChange={(event) =>
                     updateField("destination", event.target.value)
@@ -4088,18 +4183,20 @@ function Dashboard({ auth, onLogout }) {
           {activePage === "dashboard" && (
             <>
               <TripHero
-                bookings={bookings}
-                flight={flight}
-                targetDisruption={targetDisruption}
-                onSimulate={simulateDisruption}
-                simulating={simulating}
-                applying={applying}
-              />
+              bookings={bookings}
+              flight={flight}
+              tripInfo={tripInfo}
+              targetDisruption={targetDisruption}
+              onSimulate={simulateDisruption}
+              simulating={simulating}
+              applying={applying}
+            />
 
               <DisruptionCard
                 disruption={targetDisruption}
                 flight={flight}
                 impact={impact}
+                tripInfo={tripInfo}
               />
 
               <StatsGrid
@@ -4134,6 +4231,7 @@ function Dashboard({ auth, onLogout }) {
                     flight={flight}
                     transfer={transfer}
                     hotel={hotel}
+                    tripInfo={tripInfo}
                   />
 
                   <RecoveryPlans
