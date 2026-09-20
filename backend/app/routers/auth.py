@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import (
     create_access_token,
     hash_password,
-    verify_password
+    verify_password,
+    DUMMY_PASSWORD_HASH,
 )
 from app.models.user import User
 from app.schemas.auth import (
@@ -38,7 +40,7 @@ def register(
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Registration could not be completed"
         )
 
     user = User(
@@ -48,9 +50,17 @@ def register(
         role="CUSTOMER"
     )
 
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        # Avoid an account-enumeration race response.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registration could not be completed",
+        )
 
     token = create_access_token(
         user.id,
@@ -77,16 +87,12 @@ def login(
         User.email == data.email
     ).first()
 
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
-        )
+    password_hash = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
 
     if not verify_password(
         data.password,
-        user.password_hash
-    ):
+        password_hash
+    ) or user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"

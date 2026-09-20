@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,7 @@ router = APIRouter(
     prefix="/trips/{trip_id}/monitor",
     tags=["Monitoring"]
 )
+logger = logging.getLogger(__name__)
 
 
 @router.post("")
@@ -111,7 +114,9 @@ async def monitor_trip(
                 )
             })
 
-        except Exception as exc:
+        except Exception:
+            # Do not return provider, database, or network error details.
+            logger.exception("Flight monitoring failed for booking id %s", booking.id)
             results.append({
                 "booking_id": booking.id,
                 "flight_number": booking.external_reference,
@@ -120,7 +125,7 @@ async def monitor_trip(
                 "disruption_type": None,
                 "severity": None,
                 "delay_minutes": None,
-                "reason": f"Monitoring failed: {str(exc)}",
+                "reason": "Monitoring is temporarily unavailable.",
                 "disruption_id": None
             })
 

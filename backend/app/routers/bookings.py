@@ -87,6 +87,17 @@ def create_booking(
             detail="End time must be after start time"
         )
 
+    if data.external_reference:
+        duplicate = db.query(Booking).filter(
+            Booking.trip_id == trip_id,
+            Booking.external_reference == data.external_reference,
+        ).first()
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A booking with this external reference already exists in the trip",
+            )
+
     booking = Booking(
         trip_id=trip_id,
         type=data.type.upper(),

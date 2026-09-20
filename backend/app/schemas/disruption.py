@@ -1,16 +1,37 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+DISRUPTION_TYPES = {"FLIGHT_DELAY", "FLIGHT_CANCELLATION", "FLIGHT_DIVERSION"}
+SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 
 
 class DisruptionCreate(BaseModel):
-    booking_id: int
-    disruption_type: str
-    severity: str = "MEDIUM"
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    booking_id: int = Field(gt=0)
+    disruption_type: str = Field(min_length=1, max_length=50)
+    severity: str = Field(default="MEDIUM", min_length=1, max_length=30)
     new_start_time: datetime | None = None
     new_end_time: datetime | None = None
-    delay_minutes: int | None = None
-    description: str | None = None
+    delay_minutes: int | None = Field(default=None, ge=0, le=10_080)
+    description: str | None = Field(default=None, max_length=10_000)
+
+    @field_validator("disruption_type")
+    @classmethod
+    def valid_disruption_type(cls, value: str) -> str:
+        normalized = value.upper()
+        if normalized not in DISRUPTION_TYPES:
+            raise ValueError("unsupported disruption type")
+        return normalized
+
+    @field_validator("severity")
+    @classmethod
+    def valid_severity(cls, value: str) -> str:
+        normalized = value.upper()
+        if normalized not in SEVERITIES:
+            raise ValueError("unsupported severity")
+        return normalized
 
 
 class ControlledDisruptionRequest(BaseModel):
@@ -19,10 +40,19 @@ class ControlledDisruptionRequest(BaseModel):
     for demos and development testing.
     """
 
-    booking_id: int
-    delay_minutes: int = 90
-    severity: str = "HIGH"
-    description: str | None = None
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    booking_id: int = Field(gt=0)
+    delay_minutes: int = Field(default=90, ge=1, le=10_080)
+    severity: str = Field(default="HIGH", min_length=1, max_length=30)
+    description: str | None = Field(default=None, max_length=10_000)
+
+    @field_validator("severity")
+    @classmethod
+    def valid_severity(cls, value: str) -> str:
+        value = value.upper()
+        if value not in SEVERITIES:
+            raise ValueError("unsupported severity")
+        return value
 
 
 class DisruptionResponse(BaseModel):

@@ -7,13 +7,20 @@ from app.core.security import decode_access_token
 from app.models.user import User
 
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db)
 ):
+
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     token = credentials.credentials
 
@@ -22,25 +29,29 @@ def get_current_user(
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token"
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     user_id = payload.get("sub")
-
-    if user_id is None:
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     user = db.query(User).filter(
-        User.id == int(user_id)
+        User.id == user_id
     ).first()
 
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     return user

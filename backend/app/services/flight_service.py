@@ -27,8 +27,13 @@ class FlightService:
         Date and route matching are performed locally.
         """
 
+        if settings.AVIATIONSTACK_API_KEY is None:
+            # Configuration details stay server-side; callers receive a generic
+            # monitoring failure from the router.
+            raise RuntimeError("Flight provider is not configured")
+
         params = {
-            "access_key": settings.AVIATIONSTACK_API_KEY,
+            "access_key": settings.AVIATIONSTACK_API_KEY.get_secret_value(),
             "flight_iata": flight_number,
         }
 
