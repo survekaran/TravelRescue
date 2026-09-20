@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import "./App.css";
@@ -187,15 +187,15 @@ function LoginScreen({ onLogin }) {
 
             <div className="auth-feature-list">
               <div>
-                <span>âœ“</span>
+                <span>✓</span>
                 Real-time disruption monitoring
               </div>
               <div>
-                <span>âœ“</span>
+                <span>✓</span>
                 Dependency-aware recovery
               </div>
               <div>
-                <span>âœ“</span>
+                <span>✓</span>
                 Intelligent alternative planning
               </div>
             </div>
@@ -205,7 +205,7 @@ function LoginScreen({ onLogin }) {
             <div className="mini-route-top">
               <span>MUM</span>
               <div className="mini-route-line">
-                <span>âœˆ</span>
+                <span>✈</span>
               </div>
               <span>FCO</span>
             </div>
@@ -287,7 +287,7 @@ function LoginScreen({ onLogin }) {
               disabled={loading}
             >
               {loading ? "Signing in..." : "Sign in to TravelRescue"}
-              {!loading && <span>â†’</span>}
+              {!loading && <span>→</span>}
             </button>
           </form>
           <div
@@ -323,7 +323,7 @@ function LoginScreen({ onLogin }) {
         </div>
           
           <div className="auth-security">
-            <span>ðŸ”’</span>
+            <span>🔒</span>
             Secure JWT authenticated traveler portal
           </div>
         </div>
@@ -337,7 +337,7 @@ function LoginScreen({ onLogin }) {
 ========================================================= */
 
 function formatDateTime(value) {
-  if (!value) return "â€”";
+  if (!value) return "—";
 
   const date = new Date(value);
 
@@ -355,7 +355,7 @@ function formatDateTime(value) {
 }
 
 function formatShortDate(value) {
-  if (!value) return "â€”";
+  if (!value) return "—";
 
   const date = new Date(value);
 
@@ -370,7 +370,7 @@ function formatShortDate(value) {
 }
 
 function formatTime(value) {
-  if (!value) return "â€”";
+  if (!value) return "—";
 
   const date = new Date(value);
 
@@ -435,19 +435,19 @@ function getBookingStatusClass(status) {
 function getBookingIcon(type) {
   switch (type?.toUpperCase()) {
     case "FLIGHT":
-      return "âœˆ";
+      return "✈";
     case "HOTEL":
-      return "âŒ‚";
+      return "⌂";
     case "TRANSFER":
-      return "ðŸš—";
+      return "🚗";
     case "ACTIVITY":
-      return "â—ˆ";
+      return "◈";
     case "TRAIN":
-      return "â–°";
+      return "▰";
     case "BUS":
-      return "â–£";
+      return "▣";
     default:
-      return "â€¢";
+      return "•";
   }
 }
 
@@ -476,13 +476,13 @@ function getBookingLabel(type) {
 
 function Sidebar({ activePage, setActivePage, user, onLogout }) {
   const navigation = [
-    { id: "dashboard", icon: "âŒ‚", label: "Dashboard" },
-    { id: "trips", icon: "âœˆ", label: "My Trips" },
-    { id: "live", icon: "â—‰", label: "Live Updates" },
+    { id: "dashboard", icon: "⌂", label: "Dashboard" },
+    { id: "trips", icon: "✈", label: "My Trips" },
+    { id: "live", icon: "◉", label: "Live Updates" },
     { id: "disruptions", icon: "!", label: "Disruptions" },
-    { id: "recovery", icon: "â†—", label: "Recovery Plans" },
-    { id: "bookings", icon: "â–¤", label: "Bookings" },
-    { id: "assistant", icon: "âœ¦", label: "AI Assistant" },
+    { id: "recovery", icon: "↗", label: "Recovery Plans" },
+    { id: "bookings", icon: "▤", label: "Bookings" },
+    { id: "assistant", icon: "✦", label: "AI Assistant" },
   ];
 
   return (
@@ -525,7 +525,7 @@ function Sidebar({ activePage, setActivePage, user, onLogout }) {
         }`}
         onClick={() => setActivePage("settings")}
       >
-        <span className="sidebar-icon">âš™</span>
+        <span className="sidebar-icon">⚙</span>
         <span>Settings</span>
       </button>
 
@@ -544,7 +544,7 @@ function Sidebar({ activePage, setActivePage, user, onLogout }) {
           title="Logout"
           onClick={onLogout}
         >
-          â†ª
+          ↪
         </button>
       </div>
     </aside>
@@ -564,9 +564,9 @@ function Topbar({ onRefresh, refreshing, onMonitor, monitoring, user }) {
       </div>
 
       <div className="search-box">
-        <span>âŒ•</span>
+        <span>⌕</span>
         <input placeholder="Search trips, bookings or destinations..." />
-        <kbd>âŒ˜ K</kbd>
+        <kbd>⌘ K</kbd>
       </div>
 
       <div className="topbar-actions">
@@ -581,7 +581,7 @@ function Topbar({ onRefresh, refreshing, onMonitor, monitoring, user }) {
           onClick={onMonitor}
           disabled={monitoring || refreshing}
         >
-          <span>â—‰</span>
+          <span>◉</span>
           {monitoring ? "Checking..." : "Check live status"}
         </button>
 
@@ -591,11 +591,11 @@ function Topbar({ onRefresh, refreshing, onMonitor, monitoring, user }) {
           onClick={onRefresh}
           disabled={refreshing || monitoring}
         >
-          {refreshing ? "â€¦" : "â†»"}
+          {refreshing ? "…" : "↻"}
         </button>
 
         <button className="icon-button notification-button" title="Notifications">
-          â™¢
+          ♢
           <span />
         </button>
 
@@ -607,7 +607,7 @@ function Topbar({ onRefresh, refreshing, onMonitor, monitoring, user }) {
             <strong>{user?.name || "Traveler"}</strong>
             <span>Traveler</span>
           </div>
-          <span className="chevron">âŒ„</span>
+          <span className="chevron">⌄</span>
         </div>
       </div>
     </header>
@@ -649,7 +649,7 @@ function TripHero({
 
         <h1>
           {origin}
-          <span className="hero-arrow">â†’</span>
+          <span className="hero-arrow">→</span>
           {destination}
         </h1>
 
@@ -661,7 +661,7 @@ function TripHero({
 
         <div className="hero-meta">
           <div>
-            <span className="hero-meta-icon">â—·</span>
+            <span className="hero-meta-icon">◷</span>
             <div>
               <small>JOURNEY STATUS</small>
               <strong>Actively monitored</strong>
@@ -669,7 +669,7 @@ function TripHero({
           </div>
 
           <div>
-            <span className="hero-meta-icon">â–¤</span>
+            <span className="hero-meta-icon">▤</span>
             <div>
               <small>BOOKINGS</small>
               <strong>{bookings.length} connected</strong>
@@ -677,7 +677,7 @@ function TripHero({
           </div>
 
           <div>
-            <span className="hero-meta-icon">âœ¦</span>
+            <span className="hero-meta-icon">✦</span>
             <div>
               <small>RECOVERY</small>
               <strong>
@@ -694,19 +694,19 @@ function TripHero({
 
       <div className="hero-route-visual">
         <div className="route-circle route-start">
-          <span>ðŸ‡®ðŸ‡³</span>
+          <span>🇮🇳</span>
         </div>
 
         <div className="route-path">
           <span className="route-dot" />
           <div className="route-line-main">
-            <span>âœˆ</span>
+            <span>✈</span>
           </div>
           <span className="route-dot" />
         </div>
 
         <div className="route-circle route-end">
-          <span>ðŸ‡®ðŸ‡¹</span>
+          <span>🇮🇹</span>
         </div>
 
         <div className="route-labels">
@@ -725,7 +725,7 @@ function TripHero({
           targetDisruption?.status === "ACTIVE"
         }
       >
-        <span>âš¡</span>
+        <span>⚡</span>
         {simulating
           ? "Detecting disruption..."
           : targetDisruption?.status === "ACTIVE"
@@ -744,7 +744,7 @@ function DisruptionCard({ disruption, flight, impact }) {
   if (!disruption) {
     return (
       <section className="no-disruption-card">
-        <div className="safe-icon">âœ“</div>
+        <div className="safe-icon">✓</div>
         <div>
           <span className="small-label">JOURNEY STATUS</span>
           <h3>Your itinerary is currently clear</h3>
@@ -769,7 +769,7 @@ function DisruptionCard({ disruption, flight, impact }) {
     >
       <div className="disruption-main">
         <div className={`disruption-symbol ${resolved ? "resolved" : ""}`}>
-          {resolved ? "âœ“" : "!"}
+          {resolved ? "✓" : "!"}
         </div>
 
         <div className="disruption-copy">
@@ -805,8 +805,8 @@ function DisruptionCard({ disruption, flight, impact }) {
           <div className="disruption-flight">
             <strong>{flight?.external_reference || "AI101"}</strong>
             <span>
-              {flight?.name || "International flight"} Â·{" "}
-              {flight?.location || "Mumbai"} â†’{" "}
+              {flight?.name || "International flight"} ·{" "}
+              {flight?.location || "Mumbai"} →{" "}
               {flight?.destination || "Rome"}
             </span>
           </div>
@@ -820,7 +820,7 @@ function DisruptionCard({ disruption, flight, impact }) {
           <span>{formatDateTime(disruption.old_start_time)}</span>
         </div>
 
-        <div className="time-change-arrow">â†’</div>
+        <div className="time-change-arrow">→</div>
 
         <div className="changed-time">
           <small>UPDATED</small>
@@ -857,16 +857,16 @@ function StatsGrid({
 }) {
   const stats = [
     {
-      icon: "âœˆ",
+      icon: "✈",
       label: "Flight",
-      value: flight?.external_reference || "â€”",
+      value: flight?.external_reference || "—",
       sub: flight?.name || "Primary flight",
       type: "blue",
     },
     {
-      icon: "â—‰",
+      icon: "◉",
       label: "Impact level",
-      value: impact?.overall_impact || "â€”",
+      value: impact?.overall_impact || "—",
       sub: impact?.timing_conflicts?.length
         ? `${impact.timing_conflicts.length} timing conflict`
         : "No timing conflicts",
@@ -876,14 +876,14 @@ function StatsGrid({
           : "orange",
     },
     {
-      icon: "â†—",
+      icon: "↗",
       label: "Affected",
       value: `${downstreamCount}`,
       sub: "downstream bookings",
       type: "purple",
     },
     {
-      icon: recoveryResolved ? "âœ“" : "âœ¦",
+      icon: recoveryResolved ? "✓" : "✦",
       label: "Recovery",
       value: recoveryResolved
         ? "Resolved"
@@ -911,7 +911,7 @@ function StatsGrid({
             <small>{stat.sub}</small>
           </div>
 
-          <span className="stat-card-arrow">â†—</span>
+          <span className="stat-card-arrow">↗</span>
         </div>
       ))}
     </section>
@@ -1008,10 +1008,10 @@ function ItinerarySection({
                 </div>
 
                 <div className="itinerary-route">
-                  <span>â—</span>
-                  {booking.location || booking.origin || "â€”"}
-                  <span className="route-separator">â†’</span>
-                  {booking.destination || "â€”"}
+                  <span>●</span>
+                  {booking.location || booking.origin || "—"}
+                  <span className="route-separator">→</span>
+                  {booking.destination || "—"}
                 </div>
 
                 <div className="itinerary-bottom">
@@ -1027,7 +1027,7 @@ function ItinerarySection({
 
                   <div>
                     <small>REFERENCE</small>
-                    <strong>{booking.external_reference || "â€”"}</strong>
+                    <strong>{booking.external_reference || "—"}</strong>
                   </div>
                 </div>
 
@@ -1040,7 +1040,7 @@ function ItinerarySection({
 
                 {isChanged && !isAffected && (
                   <div className="itinerary-recovered">
-                    <span>âœ“</span>
+                    <span>✓</span>
                     Downstream timing updated by recovery engine.
                   </div>
                 )}
@@ -1153,10 +1153,10 @@ function JourneyMap({ flight, transfer, hotel }) {
         >
           <span>ACTIVE ROUTE</span>
           <strong>
-            {flight?.location || "Mumbai"} â†’ {flight?.destination || "Rome"}
+            {flight?.location || "Mumbai"} → {flight?.destination || "Rome"}
           </strong>
           <small>
-            {transfer?.name || "Airport transfer"} Â· {hotel?.name || "Hotel"}
+            {transfer?.name || "Airport transfer"} · {hotel?.name || "Hotel"}
           </small>
         </div>
       </div>
@@ -1222,7 +1222,7 @@ function DependencySection({ impact, targetDisruption }) {
               className={`dependency-box-node ${node.state}`}
             >
               <div className="dependency-node-icon">
-                {node.state === "affected" ? "!" : "âœ“"}
+                {node.state === "affected" ? "!" : "✓"}
               </div>
 
               <div>
@@ -1237,7 +1237,7 @@ function DependencySection({ impact, targetDisruption }) {
                   node.state === "affected" ? "active" : ""
                 }`}
               >
-                â†’
+                →
               </div>
             )}
           </div>
@@ -1257,7 +1257,7 @@ function DependencySection({ impact, targetDisruption }) {
       <div className="impact-summary">
         <div>
           <span>OVERALL IMPACT</span>
-          <strong>{impact?.overall_impact || "â€”"}</strong>
+          <strong>{impact?.overall_impact || "—"}</strong>
         </div>
 
         <div>
@@ -1306,7 +1306,7 @@ function RecoveryPlans({
 
       {recoveryResolved ? (
         <div className="recovery-completed">
-          <div className="completed-icon">âœ“</div>
+          <div className="completed-icon">✓</div>
           <h3>Recovery completed</h3>
           <p>
             Your selected recovery plan has been applied and the itinerary
@@ -1315,7 +1315,7 @@ function RecoveryPlans({
         </div>
       ) : plans.length === 0 ? (
         <div className="empty-state-new">
-          <div>âœ¦</div>
+          <div>✦</div>
           <strong>No recovery plans yet</strong>
           <span>
             TravelRescue will generate alternatives when an active
@@ -1373,7 +1373,7 @@ function RecoveryPlans({
                     <div>
                       <small>COST CHANGE</small>
                       <strong>
-                        â‚¹
+                        ₹
                         {Number(
                           plan.cost_difference || 0
                         ).toLocaleString("en-IN")}
@@ -1396,7 +1396,7 @@ function RecoveryPlans({
                             {formatTime(
                               action.proposed_start_time
                             )}
-                            {" â†’ "}
+                            {" → "}
                             {formatTime(
                               action.proposed_end_time
                             )}
@@ -1415,7 +1415,7 @@ function RecoveryPlans({
                       setSelectedPlanId(plan.plan_id);
                     }}
                   >
-                    {selected ? "âœ“ Selected" : "Review this plan"}
+                    {selected ? "✓ Selected" : "Review this plan"}
                   </button>
                 </div>
               );
@@ -1425,7 +1425,7 @@ function RecoveryPlans({
           {selectedPlan && (
             <div className="apply-plan-bar">
               <div className="apply-plan-info">
-                <div className="apply-check">âœ“</div>
+                <div className="apply-check">✓</div>
                 <div>
                   <strong>{selectedPlan.plan_id}</strong>
                   <span>
@@ -1441,7 +1441,7 @@ function RecoveryPlans({
               >
                 {applying
                   ? "Applying recovery..."
-                  : "Apply recovery plan â†’"}
+                  : "Apply recovery plan →"}
               </button>
             </div>
           )}
@@ -1568,7 +1568,7 @@ function DatePickerField({ label, value, onChange }) {
             justifyContent: "center",
           }}
         >
-          ðŸ“…
+          📅
         </button>
 
         <input
@@ -1594,7 +1594,7 @@ function DatePickerField({ label, value, onChange }) {
           color: "#64748b",
         }}
       >
-        DD/MM/YYYY Â· click ðŸ“… for calendar
+        DD/MM/YYYY · click 📅 for calendar
       </small>
     </label>
   );
@@ -1786,7 +1786,7 @@ function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDelete
             color: "#166534",
           }}
         >
-          âœ“ {success}
+          ✓ {success}
         </div>
       )}
 
@@ -1910,7 +1910,7 @@ function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDelete
                 className="apply-plan-button"
                 disabled={creating}
               >
-                {creating ? "Creating trip..." : "Create trip â†’"}
+                {creating ? "Creating trip..." : "Create trip →"}
               </button>
             </div>
           </form>
@@ -1930,13 +1930,13 @@ function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDelete
 
         {loadingTrips ? (
           <div className="empty-state-new">
-            <div>â—Œ</div>
+            <div>◌</div>
             <strong>Loading your trips...</strong>
             <span>Connecting to the TravelRescue trip planner.</span>
           </div>
         ) : trips.length === 0 ? (
           <div className="empty-state-new">
-            <div>âœˆ</div>
+            <div>✈</div>
             <strong>No trips yet</strong>
             <span>Create your first journey to start planning.</span>
           </div>
@@ -1979,7 +1979,7 @@ function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDelete
                         flexShrink: 0,
                       }}
                     >
-                      âœˆ
+                      ✈
                     </div>
                     <div style={{ minWidth: 0 }}>
                     <div
@@ -2004,7 +2004,7 @@ function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDelete
                         fontSize: "16px",
                       }}
                     >
-                      {trip.origin} <span style={{ color: "#2563eb" }}>â†’</span>{" "}
+                      {trip.origin} <span style={{ color: "#2563eb" }}>→</span>{" "}
                       {trip.destination}
                     </div>
 
@@ -2028,9 +2028,9 @@ function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDelete
                           fontWeight: 600,
                         }}
                       >
-                        {formatShortDate(trip.start_date)} â€” {formatShortDate(trip.end_date)}
+                        {formatShortDate(trip.start_date)} — {formatShortDate(trip.end_date)}
                       </span>
-                      {trip.description && <span>Â· {trip.description}</span>}
+                      {trip.description && <span>· {trip.description}</span>}
                     </div>
                   </div>
 
@@ -2047,7 +2047,7 @@ function TripsPage({ onOpenDashboard, activeTripId, onTripSelected, onTripDelete
                         className="return-dashboard-button"
                         onClick={onOpenDashboard}
                       >
-                        Open journey â†’
+                        Open journey →
                       </button>
                     ) : (
                       <button
@@ -2127,7 +2127,7 @@ function AIAssistant({ impact, plans, disruption, recoveryResolved }) {
 
       <div className="ai-card-header">
         <div className="ai-avatar">
-          âœ¦
+          ✦
         </div>
 
         <div>
@@ -2153,12 +2153,12 @@ function AIAssistant({ impact, plans, disruption, recoveryResolved }) {
       <div className="ai-suggestions">
         <button>
           Why was this affected?
-          <span>â†’</span>
+          <span>→</span>
         </button>
 
         <button>
           Explain recovery plans
-          <span>â†’</span>
+          <span>→</span>
         </button>
       </div>
     </section>
@@ -2178,7 +2178,7 @@ function BookingSummary({ bookings }) {
           <h2>Bookings</h2>
         </div>
 
-        <button className="view-all-button">View all â†’</button>
+        <button className="view-all-button">View all →</button>
       </div>
 
       <div className="booking-summary-list">
@@ -2191,7 +2191,7 @@ function BookingSummary({ bookings }) {
             <div className="booking-summary-info">
               <strong>{booking.name}</strong>
               <span>
-                {getBookingLabel(booking.type)} Â·{" "}
+                {getBookingLabel(booking.type)} ·{" "}
                 {booking.external_reference || "No reference"}
               </span>
             </div>
@@ -2333,14 +2333,14 @@ function LiveUpdatesPage({
             onClick={handleCheckNow}
             disabled={monitoring}
           >
-            {monitoring ? "Checking..." : "â†» Check now"}
+            {monitoring ? "Checking..." : "↻ Check now"}
           </button>
 
           <button
             className="return-dashboard-button"
             onClick={onOpenDashboard}
           >
-            â† Dashboard
+            ← Dashboard
           </button>
         </div>
       </section>
@@ -2404,7 +2404,7 @@ function LiveUpdatesPage({
                         fontSize: "20px",
                       }}
                     >
-                      âœˆ
+                      ✈
                     </div>
 
                     <div>
@@ -2418,7 +2418,7 @@ function LiveUpdatesPage({
                           fontSize: "13px",
                         }}
                       >
-                        {flight.provider || "Flight provider"} Â·{" "}
+                        {flight.provider || "Flight provider"} ·{" "}
                         {flight.external_reference || "No reference"}
                       </div>
                     </div>
@@ -2449,8 +2449,8 @@ function LiveUpdatesPage({
                   <div>
                     <span className="metric-label">Route</span>
                     <strong>
-                      {flight.location || "â€”"} â†’{" "}
-                      {flight.destination || "â€”"}
+                      {flight.location || "—"} →{" "}
+                      {flight.destination || "—"}
                     </strong>
                   </div>
 
@@ -2489,7 +2489,7 @@ function LiveUpdatesPage({
                     }}
                   >
                     <strong style={{ color: "#9a3412" }}>
-                      â— {activeDisruption.severity || "MEDIUM"} disruption
+                      ● {activeDisruption.severity || "MEDIUM"} disruption
                       detected
                     </strong>
                     <p
@@ -2542,7 +2542,7 @@ function LiveUpdatesPage({
                     <div className="booking-summary-info">
                       <strong>{booking.name}</strong>
                       <span>
-                        {getBookingLabel(booking.type)} Â·{" "}
+                        {getBookingLabel(booking.type)} ·{" "}
                         {booking.external_reference || "No reference"}
                       </span>
                     </div>
@@ -2864,14 +2864,14 @@ function DisruptionsPage({
             onClick={onRefresh}
             disabled={refreshing}
           >
-            {refreshing ? "Refreshing..." : "â†» Refresh"}
+            {refreshing ? "Refreshing..." : "↻ Refresh"}
           </button>
 
           <button
             className="return-dashboard-button"
             onClick={onOpenDashboard}
           >
-            â† Dashboard
+            ← Dashboard
           </button>
         </div>
       </section>
@@ -2902,7 +2902,7 @@ function DisruptionsPage({
         </div>
 
         <div className="stat-card-new">
-          <div className="stat-card-icon purple">â†—</div>
+          <div className="stat-card-icon purple">↗</div>
           <div className="stat-card-content">
             <span>RECORDED EVENTS</span>
             <strong>{orderedDisruptions.length}</strong>
@@ -2933,7 +2933,7 @@ function DisruptionsPage({
 
           {orderedDisruptions.length === 0 ? (
             <div className="empty-state-new">
-              <div>âœ“</div>
+              <div>✓</div>
               <strong>No disruptions detected</strong>
               <span>
                 Your connected itinerary currently has no recorded disruption
@@ -3031,7 +3031,7 @@ function DisruptionsPage({
                           fontWeight: 700,
                         }}
                       >
-                        {active ? "â— ACTIVE" : "âœ“ RESOLVED"}
+                        {active ? "● ACTIVE" : "✓ RESOLVED"}
                       </span>
                     </div>
                   </button>
@@ -3139,7 +3139,7 @@ function DisruptionsPage({
                   >
                     {selectedDisruption.delay_minutes
                       ? `+${selectedDisruption.delay_minutes} min`
-                      : "â€”"}
+                      : "—"}
                   </strong>
                   <small style={{ color: "#64748b" }}>
                     {selectedDisruption.status === "ACTIVE"
@@ -3213,7 +3213,7 @@ function DisruptionsPage({
                   </div>
 
                   <span style={{ fontSize: "22px", color: "#94a3b8" }}>
-                    â†’
+                    →
                   </span>
 
                   <div>
@@ -3380,14 +3380,14 @@ function DisruptionsPage({
                     className="apply-plan-button"
                     onClick={onOpenRecovery}
                   >
-                    View recovery plans â†’
+                    View recovery plans →
                   </button>
                 )}
               </div>
             </>
           ) : (
             <div className="empty-state-new" style={{ minHeight: "420px" }}>
-              <div>âœ“</div>
+              <div>✓</div>
               <strong>Journey is clear</strong>
               <span>
                 There are no disruption records to investigate.
@@ -3456,7 +3456,7 @@ function DisruptionsPage({
                     fontWeight: 800,
                   }}
                 >
-                  âœ“ RESOLVED
+                  ✓ RESOLVED
                 </span>
               </button>
             ))}
@@ -3885,7 +3885,7 @@ function Dashboard({ auth, onLogout }) {
         <main className="product-content">
           {successMessage && (
             <div className="toast success-toast">
-              <span>âœ“</span>
+              <span>✓</span>
               <div>
                 <strong>TravelRescue update</strong>
                 <p>{successMessage}</p>
@@ -4068,7 +4068,7 @@ function Dashboard({ auth, onLogout }) {
                     <h2 style={{ marginTop: 8 }}>Review recovery plans</h2>
                     <p style={{ color: "#718096", lineHeight: 1.6 }}>Compare the generated alternatives before applying a plan to the itinerary.</p>
                     <button className="return-dashboard-button" onClick={() => setActivePage("recovery")}>
-                      Open recovery workspace â†’
+                      Open recovery workspace →
                     </button>
                   </section>
                 </div>
@@ -4163,7 +4163,7 @@ function Dashboard({ auth, onLogout }) {
 
                 <div>
                   <span>{tripId ? `Trip #${tripId}` : "No active trip"}</span>
-                  <span>â€¢</span>
+                  <span>•</span>
                   <span>
                     Signed in as {auth?.user?.name || "Traveler"}
                   </span>
@@ -4267,7 +4267,7 @@ function SettingsPage({ user, tripInfo, onLogout, onOpenDashboard }) {
                 </strong>
                 <span style={{ color: "#718096", fontSize: 13 }}>
                   {tripInfo
-                    ? `${tripInfo.origin} â†’ ${tripInfo.destination} Â· Trip #${tripInfo.id}`
+                    ? `${tripInfo.origin} → ${tripInfo.destination} · Trip #${tripInfo.id}`
                     : "Create a trip to begin"}
                 </span>
               </div>
@@ -4291,7 +4291,7 @@ function SettingsPage({ user, tripInfo, onLogout, onOpenDashboard }) {
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
               <button className="return-dashboard-button" onClick={onOpenDashboard}>
-                â† Dashboard
+                ← Dashboard
               </button>
               <button
                 type="button"
@@ -4320,7 +4320,7 @@ function WorkspaceHeader({ label, title, description, onBack }) {
       <h1 style={{ margin: "8px 0 8px" }}>{title}</h1>
       <p style={{ margin: 0, color: "#667085", lineHeight: 1.6 }}>{description}</p>
       <button className="return-dashboard-button" style={{ marginTop: 18 }} onClick={onBack}>
-        â† Back to dashboard
+        ← Back to dashboard
       </button>
     </div>
   );
