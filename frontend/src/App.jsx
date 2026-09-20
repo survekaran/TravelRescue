@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import "./App.css";
@@ -1360,6 +1360,811 @@ function RecoveryPlans({
   );
 }
 
+
+
+/* =========================================================
+   RECOVERY PLANS PAGE
+========================================================= */
+
+function RecoveryPlansPage({
+  plans,
+  selectedPlanId,
+  setSelectedPlanId,
+  selectedPlan,
+  applying,
+  applyRecoveryPlan,
+  recoveryResolved,
+  disruption,
+  impact,
+  onOpenDashboard,
+}) {
+  const affectedCount = impact?.downstream_bookings?.length || 0;
+  const conflictCount = impact?.missed_buffers?.length || 0;
+
+  return (
+    <div className="recovery-page">
+      <div className="recovery-page-header">
+        <div>
+          <span className="small-label">TRAVELRESCUE INTELLIGENCE</span>
+          <h1>Recovery Plans</h1>
+          <p>
+            Review AI-generated alternatives for the active travel disruption,
+            compare their impact, and apply the plan that fits your journey.
+          </p>
+        </div>
+
+        <button
+          className="return-dashboard-button"
+          onClick={onOpenDashboard}
+        >
+          ← Back to dashboard
+        </button>
+      </div>
+
+      {disruption ? (
+        <section className="content-card recovery-overview-card">
+          <div className="card-header">
+            <div>
+              <span className="small-label">ACTIVE DISRUPTION</span>
+              <h2>
+                {disruption.disruption_type
+                  ?.replaceAll("_", " ")
+                  .replace(/\b\w/g, (letter) => letter.toUpperCase()) ||
+                  "Travel disruption"}
+              </h2>
+            </div>
+
+            <span
+              className={`severity-badge ${
+                String(disruption.severity || "").toLowerCase()
+              }`}
+            >
+              {disruption.severity || "UNKNOWN"}
+            </span>
+          </div>
+
+          <div className="recovery-overview-grid">
+            <div>
+              <span>BOOKING</span>
+              <strong>{disruption.booking_id ? `#${disruption.booking_id}` : "—"}</strong>
+            </div>
+
+            <div>
+              <span>DELAY</span>
+              <strong>{disruption.delay_minutes || 0} min</strong>
+            </div>
+
+            <div>
+              <span>DOWNSTREAM</span>
+              <strong>{affectedCount} bookings</strong>
+            </div>
+
+            <div>
+              <span>BUFFER CONFLICTS</span>
+              <strong>{conflictCount}</strong>
+            </div>
+          </div>
+
+          <div className="recovery-disruption-message">
+            <div className="recovery-disruption-icon">!</div>
+            <div>
+              <strong>
+                {disruption.description ||
+                  "TravelRescue detected a disruption affecting your itinerary."}
+              </strong>
+              <span>
+                The recovery engine has evaluated the connected booking
+                network and generated alternative plans below.
+              </span>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="content-card recovery-no-disruption">
+          <div className="completed-icon">✓</div>
+          <div>
+            <h2>No active disruption</h2>
+            <p>
+              Your itinerary is currently being monitored. Recovery plans
+              will appear automatically when a disruption creates a
+              downstream conflict.
+            </p>
+          </div>
+        </section>
+      )}
+
+      <RecoveryPlans
+        plans={plans}
+        selectedPlanId={selectedPlanId}
+        setSelectedPlanId={setSelectedPlanId}
+        selectedPlan={selectedPlan}
+        applying={applying}
+        applyRecoveryPlan={applyRecoveryPlan}
+        recoveryResolved={recoveryResolved}
+      />
+
+      {selectedPlan && !recoveryResolved && (
+        <section className="content-card recovery-decision-card">
+          <div className="card-header">
+            <div>
+              <span className="small-label">PLAN ANALYSIS</span>
+              <h2>Before you apply</h2>
+            </div>
+          </div>
+
+          <div className="recovery-decision-grid">
+            <div>
+              <span>SELECTED PLAN</span>
+              <strong>{selectedPlan.plan_id}</strong>
+            </div>
+
+            <div>
+              <span>BOOKINGS CHANGED</span>
+              <strong>{selectedPlan.bookings_changed ?? 0}</strong>
+            </div>
+
+            <div>
+              <span>ADDITIONAL DELAY</span>
+              <strong>
+                {selectedPlan.additional_delay_minutes || 0} min
+              </strong>
+            </div>
+
+            <div>
+              <span>COST CHANGE</span>
+              <strong>
+                ₹{Number(selectedPlan.cost_difference || 0).toLocaleString("en-IN")}
+              </strong>
+            </div>
+          </div>
+
+          <p className="recovery-decision-note">
+            Applying a recovery plan will reconstruct the affected itinerary
+            using the selected plan's proposed booking changes.
+          </p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   TRIP PLANNER
+========================================================= */
+
+function parseTripDate(value) {
+  const match = String(value || "").trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function tripDateToApi(value) {
+  const date = parseTripDate(value);
+  return date ? date.toISOString() : null;
+}
+
+
+function DatePickerField({ label, value, onChange }) {
+  const dateInputRef = useRef(null);
+
+  function openCalendar() {
+    const input = dateInputRef.current;
+    if (!input) return;
+
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+    } else {
+      input.click();
+    }
+  }
+
+  function handleCalendarChange(event) {
+    const isoDate = event.target.value;
+    if (!isoDate) {
+      onChange("");
+      return;
+    }
+
+    const [year, month, day] = isoDate.split("-");
+    onChange(`${day}/${month}/${year}`);
+  }
+
+  const calendarValue = (() => {
+    const parsed = parseTripDate(value);
+    if (!parsed) return "";
+
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(parsed.getDate()).padStart(2, "0")}`;
+  })();
+
+  return (
+    <label>
+      <span className="small-label">{label}</span>
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={10}
+          placeholder="DD/MM/YYYY"
+          value={value}
+          onChange={(event) =>
+            onChange(
+              event.target.value.replace(/[^0-9/]/g, "").slice(0, 10)
+            )
+          }
+          style={{
+            ...tripInputStyle,
+            paddingRight: "54px",
+          }}
+        />
+
+        <button
+          type="button"
+          onClick={openCalendar}
+          aria-label={`Choose ${label.toLowerCase()}`}
+          title="Open calendar"
+          style={{
+            position: "absolute",
+            right: "10px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: "36px",
+            height: "36px",
+            border: "1px solid #dbe3ef",
+            borderRadius: "9px",
+            background: "#f8fafc",
+            color: "#2563eb",
+            cursor: "pointer",
+            fontSize: "17px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          📅
+        </button>
+
+        <input
+          ref={dateInputRef}
+          type="date"
+          value={calendarValue}
+          onChange={handleCalendarChange}
+          aria-hidden="true"
+          tabIndex={-1}
+          style={{
+            position: "absolute",
+            width: "1px",
+            height: "1px",
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        />
+      </div>
+      <small
+        style={{
+          display: "block",
+          marginTop: "6px",
+          color: "#64748b",
+        }}
+      >
+        DD/MM/YYYY · click 📅 for calendar
+      </small>
+    </label>
+  );
+}
+
+
+function TripsPage({ onOpenDashboard }) {
+  const [trips, setTrips] = useState([]);
+  const [loadingTrips, setLoadingTrips] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showForm, setShowForm] = useState(false);
+
+  const [form, setForm] = useState({
+    name: "",
+    origin: "",
+    destination: "",
+    start_date: "",
+    end_date: "",
+    description: "",
+  });
+
+  async function loadTrips() {
+    try {
+      setLoadingTrips(true);
+      setError("");
+      const data = await apiRequest("/trips");
+      setTrips(data || []);
+    } catch (err) {
+      setError(err.message || "Unable to load your trips.");
+    } finally {
+      setLoadingTrips(false);
+    }
+  }
+
+  useEffect(() => {
+    loadTrips();
+  }, []);
+
+  function updateField(field, value) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function handleCreateTrip(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (!form.name.trim() || !form.origin.trim() || !form.destination.trim()) {
+      setError("Please enter a trip name, origin and destination.");
+      return;
+    }
+
+    if (!form.start_date || !form.end_date) {
+      setError("Please enter both dates in DD/MM/YYYY format.");
+      return;
+    }
+
+    const startDate = parseTripDate(form.start_date);
+    const endDate = parseTripDate(form.end_date);
+
+    if (!startDate || !endDate) {
+      setError("Please enter valid dates in DD/MM/YYYY format.");
+      return;
+    }
+
+    if (endDate <= startDate) {
+      setError("End date must be after start date.");
+      return;
+    }
+
+    try {
+      setCreating(true);
+
+      const payload = {
+        name: form.name.trim(),
+        origin: form.origin.trim(),
+        destination: form.destination.trim(),
+        start_date: tripDateToApi(form.start_date),
+        end_date: tripDateToApi(form.end_date),
+        description: form.description.trim() || null,
+      };
+
+      const createdTrip = await apiRequest("/trips", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      setTrips((current) => [...current, createdTrip]);
+      setForm({
+        name: "",
+        origin: "",
+        destination: "",
+        start_date: "",
+        end_date: "",
+        description: "",
+      });
+      setShowForm(false);
+      setSuccess(`"${createdTrip.name}" was created successfully.`);
+    } catch (err) {
+      setError(err.message || "Unable to create the trip.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDeleteTrip(tripId) {
+    const trip = trips.find((item) => item.id === tripId);
+    if (!trip) return;
+
+    if (!window.confirm(`Delete "${trip.name}"?`)) return;
+
+    try {
+      setError("");
+      await apiRequest(`/trips/${tripId}`, {
+        method: "DELETE",
+      });
+      setTrips((current) => current.filter((item) => item.id !== tripId));
+      setSuccess("Trip deleted successfully.");
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to delete the trip. Make sure the TravelRescue backend is running."
+      );
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: "1180px", margin: "0 auto" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "24px",
+          marginBottom: "28px",
+        }}
+      >
+        <div>
+          <span className="small-label">TRAVEL PLANNER</span>
+          <h1
+            style={{
+              margin: "8px 0 8px",
+              fontSize: "34px",
+              color: "#0f172a",
+              lineHeight: 1.15,
+            }}
+          >
+            My Trips
+          </h1>
+          <p style={{ margin: 0, color: "#64748b", maxWidth: "650px" }}>
+            Create and manage your journeys. Once a trip is created, its
+            bookings can become part of the TravelRescue recovery network.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="return-dashboard-button"
+          onClick={() => setShowForm((current) => !current)}
+          style={{ whiteSpace: "nowrap" }}
+        >
+          {showForm ? "× Close planner" : "+ Create new trip"}
+        </button>
+      </div>
+
+      {success && (
+        <div
+          style={{
+            padding: "14px 18px",
+            marginBottom: "18px",
+            borderRadius: "14px",
+            background: "#ecfdf5",
+            border: "1px solid #bbf7d0",
+            color: "#166534",
+          }}
+        >
+          ✓ {success}
+        </div>
+      )}
+
+      {error && (
+        <div
+          style={{
+            padding: "14px 18px",
+            marginBottom: "18px",
+            borderRadius: "14px",
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            color: "#b91c1c",
+          }}
+        >
+          ! {error}
+        </div>
+      )}
+
+      {showForm && (
+        <section
+          className="content-card"
+          style={{ marginBottom: "24px", padding: "28px" }}
+        >
+          <div className="card-header" style={{ marginBottom: "22px" }}>
+            <div>
+              <span className="small-label">NEW JOURNEY</span>
+              <h2>Create a trip</h2>
+            </div>
+            <span className="plan-count-badge">Trip Planner</span>
+          </div>
+
+          <form onSubmit={handleCreateTrip}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: "18px",
+              }}
+            >
+              <label>
+                <span className="small-label">TRIP NAME</span>
+                <input
+                  type="text"
+                  placeholder="e.g. Rome Adventure"
+                  value={form.name}
+                  onChange={(event) => updateField("name", event.target.value)}
+                  style={tripInputStyle}
+                />
+              </label>
+
+              <label>
+                <span className="small-label">DESCRIPTION</span>
+                <input
+                  type="text"
+                  placeholder="e.g. College vacation"
+                  value={form.description}
+                  onChange={(event) =>
+                    updateField("description", event.target.value)
+                  }
+                  style={tripInputStyle}
+                />
+              </label>
+
+              <label>
+                <span className="small-label">ORIGIN</span>
+                <input
+                  type="text"
+                  placeholder="Mumbai"
+                  value={form.origin}
+                  onChange={(event) =>
+                    updateField("origin", event.target.value)
+                  }
+                  style={tripInputStyle}
+                />
+              </label>
+
+              <label>
+                <span className="small-label">DESTINATION</span>
+                <input
+                  type="text"
+                  placeholder="Rome"
+                  value={form.destination}
+                  onChange={(event) =>
+                    updateField("destination", event.target.value)
+                  }
+                  style={tripInputStyle}
+                />
+              </label>
+
+              <DatePickerField
+                label="START DATE"
+                value={form.start_date}
+                onChange={(value) => updateField("start_date", value)}
+              />
+
+              <DatePickerField
+                label="END DATE"
+                value={form.end_date}
+                onChange={(value) => updateField("end_date", value)}
+              />
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "12px",
+                marginTop: "22px",
+              }}
+            >
+              <button
+                type="button"
+                className="view-all-button"
+                onClick={() => setShowForm(false)}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="apply-plan-button"
+                disabled={creating}
+              >
+                {creating ? "Creating trip..." : "Create trip →"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="content-card" style={{ padding: "28px" }}>
+        <div className="card-header">
+          <div>
+            <span className="small-label">YOUR JOURNEYS</span>
+            <h2 style={{ color: "#0f172a", margin: "6px 0 0", lineHeight: 1.2 }}>Trip portfolio</h2>
+          </div>
+          <span className="plan-count-badge">
+            {trips.length} {trips.length === 1 ? "trip" : "trips"}
+          </span>
+        </div>
+
+        {loadingTrips ? (
+          <div className="empty-state-new">
+            <div>◌</div>
+            <strong>Loading your trips...</strong>
+            <span>Connecting to the TravelRescue trip planner.</span>
+          </div>
+        ) : trips.length === 0 ? (
+          <div className="empty-state-new">
+            <div>✈</div>
+            <strong>No trips yet</strong>
+            <span>Create your first journey to start planning.</span>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "14px" }}>
+            {trips
+              .slice()
+              .sort(
+                (a, b) =>
+                  new Date(a.start_date).getTime() -
+                  new Date(b.start_date).getTime()
+              )
+              .map((trip) => (
+                <div
+                  key={trip.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "24px",
+                    padding: "22px 24px",
+                    border: "1px solid #dbe4f0",
+                    borderRadius: "18px",
+                    background: "linear-gradient(135deg, #ffffff 0%, #f8fbff 100%)",
+                    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "16px", minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: "46px",
+                        height: "46px",
+                        borderRadius: "14px",
+                        background: "#eff6ff",
+                        color: "#2563eb",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "21px",
+                        flexShrink: 0,
+                      }}
+                    >
+                      ✈
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <strong style={{ fontSize: "18px" }}>{trip.name}</strong>
+                      <span className="safe-pill">
+                        {trip.status || "ACTIVE"}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: "8px",
+                        color: "#0f172a",
+                        fontWeight: 700,
+                        fontSize: "16px",
+                      }}
+                    >
+                      {trip.origin} <span style={{ color: "#2563eb" }}>→</span>{" "}
+                      {trip.destination}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        flexWrap: "wrap",
+                        marginTop: "8px",
+                        color: "#64748b",
+                        fontSize: "14px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          padding: "5px 9px",
+                          borderRadius: "8px",
+                          background: "#f1f5f9",
+                          color: "#475569",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {formatShortDate(trip.start_date)} — {formatShortDate(trip.end_date)}
+                      </span>
+                      {trip.description && <span>· {trip.description}</span>}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {trip.id === TRIP_ID ? (
+                      <button
+                        type="button"
+                        className="return-dashboard-button"
+                        onClick={onOpenDashboard}
+                      >
+                        Open journey →
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="view-all-button"
+                        onClick={() =>
+                          setSuccess(
+                            `Trip #${trip.id} is ready for booking setup.`
+                          )
+                        }
+                      >
+                        Manage
+                      </button>
+                    )}
+
+                    {trip.id !== TRIP_ID && (
+                      <button
+                        type="button"
+                        className="view-all-button"
+                        onClick={() => handleDeleteTrip(trip.id)}
+                        style={{ color: "#b91c1c" }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+const tripInputStyle = {
+  display: "block",
+  width: "100%",
+  boxSizing: "border-box",
+  marginTop: "8px",
+  padding: "13px 14px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "12px",
+  background: "#fff",
+  color: "#0f172a",
+  fontSize: "14px",
+  outline: "none",
+};
+
+
 /* =========================================================
    AI ASSISTANT
 ========================================================= */
@@ -1476,6 +2281,1200 @@ function BookingSummary({ bookings }) {
         ))}
       </div>
     </section>
+  );
+}
+
+
+/* =========================================================
+   LIVE UPDATES
+========================================================= */
+
+function LiveUpdatesPage({
+  bookings,
+  disruptions,
+  impact,
+  monitoring,
+  monitorTrip,
+  onOpenDashboard,
+}) {
+  const [lastChecked, setLastChecked] = useState(null);
+
+  const flight =
+    bookings.find(
+      (booking) => booking.external_reference === "AI101"
+    ) ||
+    bookings.find(
+      (booking) => booking.type?.toUpperCase() === "FLIGHT"
+    );
+
+  const activeDisruption =
+    disruptions
+      .filter((item) => item.status === "ACTIVE")
+      .sort((a, b) => b.id - a.id)[0] ||
+    [...disruptions].sort((a, b) => b.id - a.id)[0] ||
+    null;
+
+  const delayMinutes = Number(activeDisruption?.delay_minutes || 0);
+  const updatedStartTime = getUpdatedDisruptionTime(activeDisruption);
+  const downstreamCount =
+    impact?.downstream_bookings?.length || 0;
+
+  const downstreamBookings = (impact?.downstream_bookings || [])
+    .map((item) => {
+      const bookingId =
+        typeof item === "number"
+          ? item
+          : item?.booking_id ?? item?.id;
+
+      const reference =
+        typeof item === "string"
+          ? item
+          : item?.external_reference ?? item?.reference;
+
+      return (
+        bookings.find(
+          (booking) =>
+            booking.id === bookingId ||
+            (reference &&
+              booking.external_reference === reference)
+        ) || null
+      );
+    })
+    .filter(Boolean);
+
+  async function handleCheckNow() {
+    try {
+      await monitorTrip();
+      setLastChecked(new Date());
+    } catch {
+      // monitorTrip handles user-facing errors.
+    }
+  }
+
+  const recentUpdates = [
+    activeDisruption && {
+      id: `disruption-${activeDisruption.id}`,
+      time: activeDisruption.detected_at,
+      title:
+        activeDisruption.disruption_type === "FLIGHT_DELAY"
+          ? `${flight?.external_reference || "Flight"} delay detected`
+          : `${flight?.external_reference || "Flight"} disruption detected`,
+      detail: delayMinutes
+        ? `Flight delayed by ${delayMinutes} minutes`
+        : activeDisruption.description || "Active disruption detected",
+    },
+    impact &&
+      downstreamCount > 0 && {
+        id: "impact",
+        time: activeDisruption?.detected_at,
+        title: "Cascading impact identified",
+        detail: `${downstreamCount} downstream booking${
+          downstreamCount === 1 ? "" : "s"
+        } affected`,
+      },
+    {
+      id: "system",
+      time: lastChecked,
+      title: lastChecked
+        ? "Live provider check completed"
+        : "Live monitoring ready",
+      detail: lastChecked
+        ? "Flight status and disruption records refreshed"
+        : "Use Check now to query the live flight provider",
+    },
+  ].filter(Boolean);
+
+  return (
+    <div className="page-stack">
+      <section className="page-header-card">
+        <div>
+          <span className="small-label">LIVE MONITORING</span>
+          <h1>Live Updates</h1>
+          <p>
+            TravelRescue continuously checks your active flight and
+            turns provider changes into actionable disruption events.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            className="view-all-button"
+            onClick={handleCheckNow}
+            disabled={monitoring}
+          >
+            {monitoring ? "Checking..." : "↻ Check now"}
+          </button>
+
+          <button
+            className="return-dashboard-button"
+            onClick={onOpenDashboard}
+          >
+            ← Dashboard
+          </button>
+        </div>
+      </section>
+
+      <section className="dashboard-grid">
+        <div className="dashboard-main-column">
+          <section className="panel-card">
+            <div className="section-heading">
+              <div>
+                <span className="small-label">PROVIDER STATUS</span>
+                <h2>Flight monitoring</h2>
+              </div>
+
+              <span
+                className="status-badge"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <span
+                  style={{
+                    width: "7px",
+                    height: "7px",
+                    borderRadius: "50%",
+                    background: "#16a34a",
+                  }}
+                />
+                Monitoring active
+              </span>
+            </div>
+
+            {flight ? (
+              <div
+                style={{
+                  border: "1px solid #e7ebf2",
+                  borderRadius: "16px",
+                  padding: "20px",
+                  background: "#fbfcfe",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "20px",
+                    alignItems: "flex-start",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "14px" }}>
+                    <div
+                      style={{
+                        width: "44px",
+                        height: "44px",
+                        borderRadius: "12px",
+                        display: "grid",
+                        placeItems: "center",
+                        background: "#eef4ff",
+                        fontSize: "20px",
+                      }}
+                    >
+                      ✈
+                    </div>
+
+                    <div>
+                      <strong style={{ fontSize: "17px" }}>
+                        {flight.name || flight.external_reference}
+                      </strong>
+                      <div
+                        style={{
+                          marginTop: "5px",
+                          color: "#64748b",
+                          fontSize: "13px",
+                        }}
+                      >
+                        {flight.provider || "Flight provider"} ·{" "}
+                        {flight.external_reference || "No reference"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`booking-status-pill ${
+                      activeDisruption
+                        ? "booking-status-warning"
+                        : "booking-status-success"
+                    }`}
+                  >
+                    {activeDisruption
+                      ? `DELAYED +${delayMinutes} min`
+                      : "OPERATING NORMALLY"}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(150px, 1fr))",
+                    gap: "12px",
+                    marginTop: "22px",
+                  }}
+                >
+                  <div>
+                    <span className="metric-label">Route</span>
+                    <strong>
+                      {flight.location || "—"} →{" "}
+                      {flight.destination || "—"}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="metric-label">Scheduled</span>
+                    <strong>{formatTime(flight.start_time)}</strong>
+                  </div>
+
+                  <div>
+                    <span className="metric-label">Updated</span>
+                    <strong>
+                      {activeDisruption
+                        ? formatTime(updatedStartTime)
+                        : formatTime(flight.start_time)}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span className="metric-label">Last checked</span>
+                    <strong>
+                      {lastChecked
+                        ? formatTime(lastChecked)
+                        : "Not checked this session"}
+                    </strong>
+                  </div>
+                </div>
+
+                {activeDisruption && (
+                  <div
+                    style={{
+                      marginTop: "18px",
+                      padding: "14px 16px",
+                      borderRadius: "12px",
+                      background: "#fff7ed",
+                      border: "1px solid #fed7aa",
+                    }}
+                  >
+                    <strong style={{ color: "#9a3412" }}>
+                      ● {activeDisruption.severity || "MEDIUM"} disruption
+                      detected
+                    </strong>
+                    <p
+                      style={{
+                        margin: "6px 0 0",
+                        color: "#7c2d12",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {activeDisruption.description ||
+                        `Flight delay of ${delayMinutes} minutes detected by
+                        the live monitoring service.`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <strong>No flight booking found</strong>
+                <p>
+                  Add a flight to this trip before starting live
+                  provider monitoring.
+                </p>
+              </div>
+            )}
+          </section>
+
+          <section className="panel-card">
+            <div className="section-heading">
+              <div>
+                <span className="small-label">CASCADE IMPACT</span>
+                <h2>Downstream bookings</h2>
+              </div>
+              <span className="section-count">
+                {downstreamCount} affected
+              </span>
+            </div>
+
+            {downstreamBookings.length > 0 ? (
+              <div className="booking-summary-list">
+                {downstreamBookings.map((booking) => (
+                  <div
+                    className="booking-summary-row"
+                    key={booking.id}
+                  >
+                    <div className="booking-summary-icon">
+                      {getBookingIcon(booking.type)}
+                    </div>
+
+                    <div className="booking-summary-info">
+                      <strong>{booking.name}</strong>
+                      <span>
+                        {getBookingLabel(booking.type)} ·{" "}
+                        {booking.external_reference || "No reference"}
+                      </span>
+                    </div>
+
+                    <div className="booking-summary-time">
+                      <strong>
+                        {formatShortDate(booking.start_time)}
+                      </strong>
+                      <span>{formatTime(booking.start_time)}</span>
+                    </div>
+
+                    <span className="booking-status-pill booking-status-warning">
+                      AFFECTED
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <strong>No cascading impact detected</strong>
+                <p>
+                  When a monitored disruption affects downstream
+                  bookings, TravelRescue will show the dependency chain
+                  here.
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
+
+        <aside className="dashboard-side-column">
+          <section className="panel-card">
+            <div className="section-heading">
+              <div>
+                <span className="small-label">RECENT ACTIVITY</span>
+                <h2>Monitoring timeline</h2>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: "18px" }}>
+              {recentUpdates.map((update, index) => (
+                <div
+                  key={update.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "18px 1fr",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ position: "relative" }}>
+                    <span
+                      style={{
+                        display: "block",
+                        width: "9px",
+                        height: "9px",
+                        marginTop: "5px",
+                        borderRadius: "50%",
+                        background:
+                          index === 0 && activeDisruption
+                            ? "#f59e0b"
+                            : "#3b82f6",
+                      }}
+                    />
+
+                    {index < recentUpdates.length - 1 && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          left: "4px",
+                          top: "17px",
+                          bottom: "-20px",
+                          width: "1px",
+                          background: "#e2e8f0",
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <strong style={{ fontSize: "13px" }}>
+                      {update.title}
+                    </strong>
+                    <p
+                      style={{
+                        margin: "4px 0 3px",
+                        color: "#64748b",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {update.detail}
+                    </p>
+                    <span
+                      style={{
+                        color: "#94a3b8",
+                        fontSize: "11px",
+                      }}
+                    >
+                      {update.time
+                        ? formatDateTime(update.time)
+                        : "Waiting for first live check"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel-card">
+            <span className="small-label">HOW IT WORKS</span>
+            <h2 style={{ marginTop: "7px" }}>
+              From signal to recovery
+            </h2>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "10px",
+                marginTop: "16px",
+              }}
+            >
+              {[
+                ["01", "Provider check", "Fetch live flight status"],
+                ["02", "Disruption", "Create a tracked event"],
+                ["03", "Impact", "Trace dependent bookings"],
+                ["04", "Recovery", "Generate recovery options"],
+              ].map(([number, title, description]) => (
+                <div
+                  key={number}
+                  style={{
+                    display: "flex",
+                    gap: "11px",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "27px",
+                      height: "27px",
+                      borderRadius: "8px",
+                      display: "grid",
+                      placeItems: "center",
+                      background: "#f1f5f9",
+                      color: "#475569",
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {number}
+                  </span>
+
+                  <div>
+                    <strong style={{ fontSize: "12px" }}>
+                      {title}
+                    </strong>
+                    <p
+                      style={{
+                        margin: "2px 0 0",
+                        color: "#64748b",
+                        fontSize: "11px",
+                      }}
+                    >
+                      {description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </section>
+    </div>
+  );
+}
+
+
+/* =========================================================
+   BOOKINGS PAGE
+========================================================= */
+
+function BookingsPage({
+  bookings,
+  onRefresh,
+  refreshing,
+  onOpenDashboard,
+}) {
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [selectedBookingId, setSelectedBookingId] = useState(
+    bookings[0]?.id ?? null
+  );
+
+  const filteredBookings = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return [...bookings]
+      .filter((booking) => {
+        const searchable = [
+          booking.name,
+          booking.provider,
+          booking.type,
+          booking.external_reference,
+          booking.location,
+          booking.destination,
+        ]
+          .filter(Boolean)
+          .map((value) => String(value).toLowerCase());
+
+        const matchesQuery =
+          !normalizedQuery ||
+          searchable.some((value) => value.includes(normalizedQuery));
+
+        const matchesType =
+          typeFilter === "ALL" ||
+          String(booking.type || "").toUpperCase() === typeFilter;
+
+        const matchesStatus =
+          statusFilter === "ALL" ||
+          String(booking.status || "CONFIRMED").toUpperCase() ===
+            statusFilter;
+
+        return matchesQuery && matchesType && matchesStatus;
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.start_time || 0).getTime() -
+          new Date(b.start_time || 0).getTime()
+      );
+  }, [bookings, query, typeFilter, statusFilter]);
+
+  useEffect(() => {
+    if (
+      selectedBookingId &&
+      filteredBookings.some((booking) => booking.id === selectedBookingId)
+    ) {
+      return;
+    }
+
+    setSelectedBookingId(filteredBookings[0]?.id ?? null);
+  }, [filteredBookings, selectedBookingId]);
+
+  const selectedBooking =
+    bookings.find((booking) => booking.id === selectedBookingId) || null;
+
+  const bookingTypes = [
+    "ALL",
+    ...Array.from(
+      new Set(
+        bookings
+          .map((booking) => String(booking.type || "").toUpperCase())
+          .filter(Boolean)
+      )
+    ),
+  ];
+
+  const bookingStatuses = [
+    "ALL",
+    ...Array.from(
+      new Set(
+        bookings
+          .map((booking) => String(booking.status || "CONFIRMED").toUpperCase())
+          .filter(Boolean)
+      )
+    ),
+  ];
+
+  const confirmedCount = bookings.filter(
+    (booking) =>
+      String(booking.status || "CONFIRMED").toUpperCase() === "CONFIRMED"
+  ).length;
+
+  const affectedCount = bookings.filter(
+    (booking) => String(booking.status || "").toUpperCase() === "AFFECTED"
+  ).length;
+
+  function getDependencies(booking) {
+    if (!booking?.depends_on) return [];
+
+    if (Array.isArray(booking.depends_on)) {
+      return booking.depends_on;
+    }
+
+    try {
+      const parsed = JSON.parse(booking.depends_on);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function statusClass(status) {
+    const value = String(status || "CONFIRMED").toUpperCase();
+    if (value === "AFFECTED" || value === "DISRUPTED") {
+      return "booking-status-warning";
+    }
+    if (value === "CANCELLED" || value === "FAILED") {
+      return "booking-status-danger";
+    }
+    return "booking-status-success";
+  }
+
+  return (
+    <div className="page-stack" style={{ gap: "18px" }}>
+      <section
+        className="page-header-card"
+        style={{
+          padding: "24px 26px",
+          alignItems: "center",
+          minHeight: "auto",
+        }}
+      >
+        <div>
+          <span className="small-label">CONNECTED SERVICES</span>
+          <h1 style={{ margin: "6px 0 5px", fontSize: "30px" }}>
+            Bookings
+          </h1>
+          <p style={{ margin: 0, maxWidth: "650px" }}>
+            Your connected journey services, schedules, providers and
+            dependencies in one place.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", gap: "9px", flexShrink: 0 }}>
+          <button
+            className="view-all-button"
+            onClick={onRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? "Refreshing..." : "↻ Refresh"}
+          </button>
+          <button className="return-dashboard-button" onClick={onOpenDashboard}>
+            ← Dashboard
+          </button>
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: "12px",
+        }}
+      >
+        {[
+          ["TOTAL", bookings.length, "Connected services"],
+          ["CONFIRMED", confirmedCount, "Currently confirmed"],
+          ["AFFECTED", affectedCount, "Need attention"],
+          ["NODES", bookings.length, "Dependency nodes"],
+        ].map(([label, value, caption]) => (
+          <div
+            key={label}
+            style={{
+              background: "#fff",
+              border: "1px solid #e8edf5",
+              borderRadius: "14px",
+              padding: "16px 18px",
+              boxShadow: "0 4px 16px rgba(15, 23, 42, 0.03)",
+            }}
+          >
+            <span className="small-label">{label}</span>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: "8px",
+                marginTop: "5px",
+              }}
+            >
+              <strong style={{ fontSize: "25px", lineHeight: 1 }}>
+                {value}
+              </strong>
+              <span style={{ color: "#64748b", fontSize: "12px" }}>
+                {caption}
+              </span>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <section
+        className="content-card"
+        style={{
+          padding: "20px",
+          overflow: "visible",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "13px",
+          }}
+        >
+          <div>
+            <span className="small-label">BOOKING MANAGEMENT</span>
+            <h2 style={{ margin: "5px 0 0", fontSize: "20px" }}>
+              Journey services
+            </h2>
+          </div>
+
+          <span className="plan-count-badge">
+            {filteredBookings.length} shown
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(240px, 1fr) 150px 150px",
+            gap: "9px",
+            marginBottom: "14px",
+          }}
+        >
+          <div style={{ position: "relative" }}>
+            <span
+              style={{
+                position: "absolute",
+                left: "13px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "#94a3b8",
+                fontSize: "14px",
+              }}
+            >
+              ⌕
+            </span>
+            <input
+              className="trip-search-input"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                paddingLeft: "35px",
+                height: "42px",
+                borderRadius: "10px",
+                border: "1px solid #dbe3ef",
+                background: "#fbfcfe",
+                fontSize: "13px",
+              }}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search booking, provider or route..."
+            />
+          </div>
+
+          <select
+            className="trip-search-input"
+            style={{
+              height: "42px",
+              borderRadius: "10px",
+              border: "1px solid #dbe3ef",
+              background: "#fbfcfe",
+              fontSize: "13px",
+              padding: "0 10px",
+            }}
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value)}
+          >
+            {bookingTypes.map((type) => (
+              <option key={type} value={type}>
+                {type === "ALL" ? "All types" : type}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="trip-search-input"
+            style={{
+              height: "42px",
+              borderRadius: "10px",
+              border: "1px solid #dbe3ef",
+              background: "#fbfcfe",
+              fontSize: "13px",
+              padding: "0 10px",
+            }}
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            {bookingStatuses.map((status) => (
+              <option key={status} value={status}>
+                {status === "ALL" ? "All statuses" : status}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {filteredBookings.length === 0 ? (
+          <div className="empty-state-new">
+            <div>▣</div>
+            <strong>No bookings found</strong>
+            <span>Try changing the search text or filters.</span>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.55fr) minmax(310px, 0.8fr)",
+              gap: "14px",
+              alignItems: "start",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+              }}
+            >
+              {filteredBookings.map((booking, index) => {
+                const selected = booking.id === selectedBookingId;
+                const status = String(
+                  booking.status || "CONFIRMED"
+                ).toUpperCase();
+
+                return (
+                  <button
+                    type="button"
+                    key={booking.id}
+                    onClick={() => setSelectedBookingId(booking.id)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      border: selected
+                        ? "1px solid #3b82f6"
+                        : "1px solid #e6ebf2",
+                      background: selected ? "#f5f9ff" : "#fff",
+                      borderRadius: "12px",
+                      padding: "13px 14px",
+                      cursor: "pointer",
+                      display: "grid",
+                      gridTemplateColumns: "38px minmax(0, 1fr) auto",
+                      gap: "12px",
+                      alignItems: "center",
+                      boxShadow: selected
+                        ? "0 3px 12px rgba(37, 99, 235, 0.08)"
+                        : "none",
+                    }}
+                  >
+                    <div
+                      className="booking-summary-icon"
+                      style={{
+                        width: "38px",
+                        height: "38px",
+                        display: "grid",
+                        placeItems: "center",
+                      }}
+                    >
+                      {getBookingIcon(booking.type)}
+                    </div>
+
+                    <div
+                      style={{
+                        minWidth: 0,
+                        display: "grid",
+                        gap: "3px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          minWidth: 0,
+                        }}
+                      >
+                        <strong
+                          style={{
+                            fontSize: "13px",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {booking.name}
+                        </strong>
+                        <span
+                          style={{
+                            color: "#94a3b8",
+                            fontSize: "11px",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {booking.external_reference || "—"}
+                        </span>
+                      </div>
+
+                      <span
+                        style={{
+                          color: "#64748b",
+                          fontSize: "11px",
+                        }}
+                      >
+                        {booking.location || "—"} →{" "}
+                        {booking.destination || "—"}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <div style={{ textAlign: "right" }}>
+                        <strong style={{ display: "block", fontSize: "12px" }}>
+                          {formatShortDate(booking.start_time)}
+                        </strong>
+                        <span
+                          style={{
+                            display: "block",
+                            color: "#64748b",
+                            fontSize: "11px",
+                            marginTop: "2px",
+                          }}
+                        >
+                          {formatTime(booking.start_time)}
+                        </span>
+                      </div>
+
+                      <span
+                        className={`booking-status-pill ${statusClass(status)}`}
+                        style={{ fontSize: "9px" }}
+                      >
+                        {status}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <aside
+              style={{
+                border: "1px solid #e6ebf2",
+                borderRadius: "13px",
+                padding: "17px",
+                background: "#fbfcfe",
+                position: "sticky",
+                top: "16px",
+              }}
+            >
+              {selectedBooking ? (
+                <>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      alignItems: "flex-start",
+                      marginBottom: "14px",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <span className="small-label">BOOKING DETAILS</span>
+                      <h3
+                        style={{
+                          margin: "5px 0 3px",
+                          fontSize: "17px",
+                          lineHeight: 1.25,
+                        }}
+                      >
+                        {selectedBooking.name}
+                      </h3>
+                      <span style={{ color: "#64748b", fontSize: "11px" }}>
+                        {selectedBooking.external_reference || "No reference"}
+                      </span>
+                    </div>
+
+                    <div className="booking-summary-icon">
+                      {getBookingIcon(selectedBooking.type)}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "7px",
+                    }}
+                  >
+                    {[
+                      ["TYPE", getBookingLabel(selectedBooking.type)],
+                      ["STATUS", selectedBooking.status || "CONFIRMED"],
+                      ["PROVIDER", selectedBooking.provider || "—"],
+                      [
+                        "COST",
+                        selectedBooking.cost != null
+                          ? `₹${Number(selectedBooking.cost).toLocaleString(
+                              "en-IN"
+                            )}`
+                          : "—",
+                      ],
+                    ].map(([label, value]) => (
+                      <div
+                        key={label}
+                        style={{
+                          background: "#fff",
+                          border: "1px solid #e7ebf1",
+                          borderRadius: "9px",
+                          padding: "9px 10px",
+                          minWidth: 0,
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "block",
+                            color: "#94a3b8",
+                            fontSize: "8px",
+                            fontWeight: 800,
+                            letterSpacing: "1.1px",
+                          }}
+                        >
+                          {label}
+                        </span>
+                        <strong
+                          style={{
+                            display: "block",
+                            marginTop: "4px",
+                            fontSize: "12px",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {value}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "9px",
+                      padding: "11px 12px",
+                      borderRadius: "10px",
+                      background: "#fff",
+                      border: "1px solid #e7ebf1",
+                    }}
+                  >
+                    <span className="small-label">ROUTE</span>
+                    <strong
+                      style={{
+                        display: "block",
+                        marginTop: "5px",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {selectedBooking.location || "—"} →{" "}
+                      {selectedBooking.destination || "—"}
+                    </strong>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "9px",
+                      padding: "11px 12px",
+                      borderRadius: "10px",
+                      background: "#fff",
+                      border: "1px solid #e7ebf1",
+                    }}
+                  >
+                    <span className="small-label">SCHEDULE</span>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto 1fr",
+                        alignItems: "center",
+                        gap: "7px",
+                        marginTop: "7px",
+                      }}
+                    >
+                      <strong style={{ fontSize: "11px" }}>
+                        {formatDateTime(selectedBooking.start_time)}
+                      </strong>
+                      <span style={{ color: "#94a3b8" }}>→</span>
+                      <strong style={{ fontSize: "11px" }}>
+                        {formatDateTime(selectedBooking.end_time)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "9px",
+                      padding: "11px 12px",
+                      borderRadius: "10px",
+                      background: "#fff",
+                      border: "1px solid #e7ebf1",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "10px",
+                        alignItems: "center",
+                      }}
+                    >
+                      <span className="small-label">DEPENDENCIES</span>
+                      <span
+                        style={{
+                          color: "#64748b",
+                          fontSize: "11px",
+                        }}
+                      >
+                        {selectedBooking.buffer_minutes ?? 0} min buffer
+                      </span>
+                    </div>
+
+                    {getDependencies(selectedBooking).length > 0 ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "6px",
+                          flexWrap: "wrap",
+                          marginTop: "7px",
+                        }}
+                      >
+                        {getDependencies(selectedBooking).map((dependency) => (
+                          <span
+                            key={dependency}
+                            style={{
+                              padding: "5px 8px",
+                              borderRadius: "7px",
+                              background: "#eff6ff",
+                              color: "#1d4ed8",
+                              fontSize: "10px",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {dependency}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span
+                        style={{
+                          display: "block",
+                          marginTop: "6px",
+                          color: "#64748b",
+                          fontSize: "11px",
+                        }}
+                      >
+                        No upstream dependency
+                      </span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="empty-state">
+                  <strong>Select a booking</strong>
+                  <p>
+                    Choose a booking from the itinerary list to inspect its
+                    details.
+                  </p>
+                </div>
+              )}
+            </aside>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -1824,32 +3823,94 @@ function Dashboard({ auth, onLogout }) {
             </div>
           )}
 
-          {activePage !== "dashboard" && (
-            <div className="page-placeholder">
-              <span className="small-label">TRAVELRESCUE</span>
-              <h1>
-                {activePage === "trips" && "My Trips"}
-                {activePage === "live" && "Live Updates"}
-                {activePage === "disruptions" && "Disruptions"}
-                {activePage === "recovery" && "Recovery Plans"}
-                {activePage === "bookings" && "Bookings"}
-                {activePage === "assistant" && "AI Assistant"}
-                {activePage === "settings" && "Settings"}
-              </h1>
-              <p>
-                This section is part of the TravelRescue product
-                architecture. The active dashboard contains the working
-                trip monitoring and recovery workflow.
-              </p>
-
-              <button
-                className="return-dashboard-button"
-                onClick={() => setActivePage("dashboard")}
-              >
-                ← Back to dashboard
-              </button>
-            </div>
+          {activePage === "trips" && (
+            <TripsPage onOpenDashboard={() => setActivePage("dashboard")} />
           )}
+
+          {activePage === "live" && (
+            <LiveUpdatesPage
+              bookings={bookings}
+              disruptions={disruptions}
+              impact={impact}
+              monitoring={monitoring}
+              monitorTrip={monitorTrip}
+              onOpenDashboard={() => setActivePage("dashboard")}
+            />
+          )}
+
+          {activePage === "recovery" && (
+            <RecoveryPlansPage
+              plans={plans}
+              selectedPlanId={selectedPlanId}
+              setSelectedPlanId={setSelectedPlanId}
+              selectedPlan={selectedPlan}
+              applying={applying}
+              applyRecoveryPlan={applyRecoveryPlan}
+              recoveryResolved={recoveryResolved}
+              disruption={targetDisruption}
+              impact={impact}
+              onOpenDashboard={() => setActivePage("dashboard")}
+            />
+          )}
+
+          {activePage === "bookings" && (
+            <BookingsPage
+              bookings={bookings}
+              onRefresh={() => loadDashboard(true)}
+              refreshing={refreshing}
+              onOpenDashboard={() => setActivePage("dashboard")}
+            />
+          )}
+
+          {activePage === "assistant" && (
+            <AIAssistantPage
+              bookings={bookings}
+              disruptions={disruptions}
+              impact={impact}
+              plans={plans}
+              onRefresh={() => loadDashboard(true)}
+              refreshing={refreshing}
+              onOpenDashboard={() => setActivePage("dashboard")}
+            />
+          )}
+
+          {activePage === "settings" && (
+            <SettingsPage
+              currentUser={auth?.user}
+              onOpenDashboard={() => setActivePage("dashboard")}
+              onLogout={onLogout}
+            />
+          )}
+
+          {activePage !== "dashboard" &&
+            activePage !== "trips" &&
+            activePage !== "live" &&
+            activePage !== "recovery" &&
+            activePage !== "bookings" &&
+            activePage !== "assistant" &&
+            activePage !== "settings" && (
+              <div className="page-placeholder">
+                <span className="small-label">TRAVELRESCUE</span>
+                <h1>
+                  {activePage === "disruptions" && "Disruptions"}
+                  {activePage === "bookings" && "Bookings"}
+                  {activePage === "assistant" && "AI Assistant"}
+                  {activePage === "settings" && "Settings"}
+                </h1>
+                <p>
+                  This section is part of the TravelRescue product
+                  architecture. The active dashboard contains the working
+                  trip monitoring and recovery workflow.
+                </p>
+
+                <button
+                  className="return-dashboard-button"
+                  onClick={() => setActivePage("dashboard")}
+                >
+                  ← Back to dashboard
+                </button>
+              </div>
+            )}
 
           {activePage === "dashboard" && (
             <>
@@ -1939,6 +4000,1148 @@ function Dashboard({ auth, onLogout }) {
           )}
         </main>
       </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   AI ASSISTANT
+========================================================= */
+
+function AIAssistantPage({
+  bookings,
+  disruptions,
+  impact,
+  plans,
+  onRefresh,
+  refreshing,
+  onOpenDashboard,
+}) {
+  const activeDisruption =
+    disruptions
+      .filter((item) => item.status === "ACTIVE")
+      .sort((a, b) => b.id - a.id)[0] || null;
+
+  const flight =
+    bookings.find(
+      (booking) => booking.external_reference === "AI101"
+    ) ||
+    bookings.find(
+      (booking) => String(booking.type || "").toUpperCase() === "FLIGHT"
+    );
+
+  const downstreamBookings = impact?.downstream_bookings || [];
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      role: "assistant",
+      text:
+        "Hi! I’m the TravelRescue Copilot. I can explain your current disruption, trace the cascade, summarize recovery plans, and help you understand what happens next.",
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [thinking, setThinking] = useState(false);
+
+  const context = useMemo(
+    () => ({
+      flight,
+      activeDisruption,
+      downstreamBookings,
+      plans,
+      bookings,
+    }),
+    [flight, activeDisruption, downstreamBookings, plans, bookings]
+  );
+
+  function formatPlan(plan) {
+    if (!plan) return "No recovery plan is currently available.";
+    const changes = plan.changes || plan.booking_changes || [];
+    const changeCount = Array.isArray(changes) ? changes.length : 0;
+    const cost =
+      plan.cost_difference ??
+      plan.additional_cost ??
+      plan.total_cost_difference ??
+      null;
+
+    return `${plan.plan_id || "Plan"} changes ${changeCount} booking${
+      changeCount === 1 ? "" : "s"
+    }${cost != null ? ` with a cost difference of ₹${Number(cost).toLocaleString("en-IN")}` : ""}.`;
+  }
+
+  function buildResponse(question) {
+    const q = question.toLowerCase();
+
+    if (
+      q.includes("what happened") ||
+      q.includes("why") ||
+      q.includes("disruption") ||
+      q.includes("delay")
+    ) {
+      if (!activeDisruption) {
+        return "There is no active disruption currently recorded for this trip. The monitoring service can be checked from Live Updates.";
+      }
+
+      const delay = activeDisruption.delay_minutes || 0;
+      const severity = activeDisruption.severity || "MEDIUM";
+      const affected = downstreamBookings.length;
+
+      return `AI101 is currently showing a ${delay}-minute flight delay with ${severity} severity. TravelRescue detected the disruption and traced ${affected} downstream booking${
+        affected === 1 ? "" : "s"
+      }. ${
+        activeDisruption.description ||
+        "The dependency graph is being used to determine which connected services may be affected."
+      }`;
+    }
+
+    if (
+      q.includes("affected") ||
+      q.includes("cascade") ||
+      q.includes("downstream") ||
+      q.includes("impact")
+    ) {
+      if (!downstreamBookings.length) {
+        return "No downstream bookings are currently marked as affected.";
+      }
+
+      const names = downstreamBookings
+        .slice(0, 4)
+        .map((booking) => booking.name)
+        .filter(Boolean);
+
+      return `The disruption currently affects ${downstreamBookings.length} downstream booking${
+        downstreamBookings.length === 1 ? "" : "s"
+      }: ${names.join(", ")}. TravelRescue identifies these through the booking dependency graph rather than treating each booking independently.`;
+    }
+
+    if (
+      q.includes("recovery") ||
+      q.includes("plan") ||
+      q.includes("option") ||
+      q.includes("alternative")
+    ) {
+      if (!plans.length) {
+        return "There are no recovery plans available for the current disruption. Refresh the trip data or generate plans from the Recovery Plans section.";
+      }
+
+      return `TravelRescue has generated ${plans.length} recovery option${
+        plans.length === 1 ? "" : "s"
+      }. ${plans
+        .slice(0, 3)
+        .map(formatPlan)
+        .join(" ")} Open Recovery Plans to inspect the exact booking changes before applying one.`;
+    }
+
+    if (
+      q.includes("what should i do") ||
+      q.includes("recommend") ||
+      q.includes("next step") ||
+      q.includes("now")
+    ) {
+      if (activeDisruption && plans.length) {
+        return `Your trip has an active ${activeDisruption.severity || "MEDIUM"} disruption and ${plans.length} recovery option${
+          plans.length === 1 ? "" : "s"
+        }. The next step is to review the proposed changes and trade-offs in Recovery Plans before approving a reconstruction.`;
+      }
+
+      return "The next step is to run a live provider check, review any detected disruption, and then inspect recovery options if the itinerary is affected.";
+    }
+
+    if (
+      q.includes("flight") ||
+      q.includes("ai101") ||
+      q.includes("status")
+    ) {
+      if (!flight) {
+        return "I don't currently have a flight booking in the loaded itinerary.";
+      }
+
+      return `${flight.name || "Flight"} (${flight.external_reference || "—"}) is scheduled from ${
+        flight.location || "—"
+      } to ${flight.destination || "—"}. Its current booking status is ${
+        flight.status || "CONFIRMED"
+      }.${
+        activeDisruption?.delay_minutes
+          ? ` The active disruption records a ${activeDisruption.delay_minutes}-minute delay.`
+          : ""
+      }`;
+    }
+
+    if (
+      q.includes("booking") ||
+      q.includes("itinerary") ||
+      q.includes("trip")
+    ) {
+      return `Your current itinerary contains ${bookings.length} connected booking${
+        bookings.length === 1 ? "" : "s"
+      }. TravelRescue links them through dependencies so a disruption in one service can be propagated to downstream services.`;
+    }
+
+    return `I can help with this trip using the information currently loaded in TravelRescue. Try asking me "What happened?", "What bookings are affected?", "Explain the recovery options", or "What should I do next?"`;
+  }
+
+  function submitQuestion(question = input) {
+    const trimmed = String(question || "").trim();
+    if (!trimmed || thinking) return;
+
+    const userMessage = {
+      id: Date.now(),
+      role: "user",
+      text: trimmed,
+    };
+
+    setMessages((current) => [...current, userMessage]);
+    setInput("");
+    setThinking(true);
+
+    window.setTimeout(() => {
+      const answer = buildResponse(trimmed);
+      setMessages((current) => [
+        ...current,
+        {
+          id: Date.now() + 1,
+          role: "assistant",
+          text: answer,
+        },
+      ]);
+      setThinking(false);
+    }, 450);
+  }
+
+  const quickQuestions = [
+    "What happened to my flight?",
+    "Which bookings are affected?",
+    "Explain the recovery options",
+    "What should I do next?",
+  ];
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "16px",
+        minHeight: "calc(100vh - 150px)",
+      }}
+    >
+      <section
+        style={{
+          background: "#fff",
+          border: "1px solid #e7ebf2",
+          borderRadius: "16px",
+          padding: "22px 24px",
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "20px",
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <span className="small-label">TRAVELRESCUE COPILOT</span>
+          <h1 style={{ margin: "5px 0", fontSize: "28px" }}>
+            AI Assistant
+          </h1>
+          <p style={{ margin: 0, color: "#64748b", fontSize: "13px" }}>
+            Ask questions about your live itinerary, disruption impact and
+            recovery options.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+          <button
+            className="view-all-button"
+            onClick={onRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? "Refreshing..." : "↻ Refresh context"}
+          </button>
+          <button className="return-dashboard-button" onClick={onOpenDashboard}>
+            ← Dashboard
+          </button>
+        </div>
+      </section>
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) 290px",
+          gap: "16px",
+          alignItems: "stretch",
+        }}
+      >
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e7ebf2",
+            borderRadius: "16px",
+            minHeight: "560px",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              padding: "15px 18px",
+              borderBottom: "1px solid #edf1f6",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+              <div
+                style={{
+                  width: "34px",
+                  height: "34px",
+                  borderRadius: "10px",
+                  background: "#eef4ff",
+                  color: "#2563eb",
+                  display: "grid",
+                  placeItems: "center",
+                  fontWeight: 800,
+                }}
+              >
+                ✦
+              </div>
+              <div>
+                <strong style={{ display: "block", fontSize: "13px" }}>
+                  TravelRescue Copilot
+                </strong>
+                <span style={{ color: "#16a34a", fontSize: "10px" }}>
+                  ● Context connected
+                </span>
+              </div>
+            </div>
+
+            <span
+              style={{
+                fontSize: "10px",
+                color: "#64748b",
+                background: "#f8fafc",
+                padding: "6px 8px",
+                borderRadius: "7px",
+              }}
+            >
+              Trip #{TRIP_ID}
+            </span>
+          </div>
+
+          <div
+            style={{
+              flex: 1,
+              padding: "18px",
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              background: "#fbfcfe",
+            }}
+          >
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                style={{
+                  alignSelf:
+                    message.role === "user" ? "flex-end" : "flex-start",
+                  maxWidth: "78%",
+                  display: "flex",
+                  gap: "8px",
+                  alignItems: "flex-start",
+                  flexDirection:
+                    message.role === "user" ? "row-reverse" : "row",
+                }}
+              >
+                {message.role === "assistant" && (
+                  <div
+                    style={{
+                      width: "28px",
+                      height: "28px",
+                      flexShrink: 0,
+                      borderRadius: "9px",
+                      background: "#2563eb",
+                      color: "#fff",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: "12px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    ✦
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    padding: "11px 13px",
+                    borderRadius:
+                      message.role === "user"
+                        ? "13px 13px 3px 13px"
+                        : "3px 13px 13px 13px",
+                    background:
+                      message.role === "user" ? "#2563eb" : "#fff",
+                    color: message.role === "user" ? "#fff" : "#334155",
+                    border:
+                      message.role === "user"
+                        ? "none"
+                        : "1px solid #e5eaf1",
+                    fontSize: "12px",
+                    lineHeight: 1.55,
+                    boxShadow:
+                      message.role === "user"
+                        ? "0 4px 12px rgba(37,99,235,.12)"
+                        : "none",
+                  }}
+                >
+                  {message.text}
+                </div>
+              </div>
+            ))}
+
+            {thinking && (
+              <div
+                style={{
+                  alignSelf: "flex-start",
+                  color: "#64748b",
+                  fontSize: "11px",
+                  paddingLeft: "36px",
+                }}
+              >
+                Copilot is analyzing your trip context…
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              padding: "12px 14px 14px",
+              borderTop: "1px solid #edf1f6",
+              background: "#fff",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: "7px",
+                overflowX: "auto",
+                paddingBottom: "9px",
+              }}
+            >
+              {quickQuestions.map((question) => (
+                <button
+                  type="button"
+                  key={question}
+                  onClick={() => submitQuestion(question)}
+                  style={{
+                    border: "1px solid #dbe4f0",
+                    background: "#f8fafc",
+                    color: "#475569",
+                    borderRadius: "8px",
+                    padding: "7px 9px",
+                    fontSize: "10px",
+                    whiteSpace: "nowrap",
+                    cursor: "pointer",
+                  }}
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitQuestion();
+              }}
+              style={{
+                display: "flex",
+                gap: "8px",
+              }}
+            >
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Ask about your trip..."
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: "44px",
+                  borderRadius: "10px",
+                  border: "1px solid #dbe3ef",
+                  background: "#fbfcfe",
+                  padding: "0 13px",
+                  fontSize: "12px",
+                  outline: "none",
+                }}
+              />
+              <button
+                type="submit"
+                className="return-dashboard-button"
+                disabled={!input.trim() || thinking}
+                style={{ minWidth: "76px" }}
+              >
+                Send
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <aside
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e7ebf2",
+              borderRadius: "14px",
+              padding: "16px",
+            }}
+          >
+            <span className="small-label">LIVE CONTEXT</span>
+
+            {[
+              [
+                "Flight",
+                flight
+                  ? `${flight.external_reference || "Flight"} · ${
+                      flight.location || "—"
+                    } → ${flight.destination || "—"}`
+                  : "No flight loaded",
+              ],
+              [
+                "Disruption",
+                activeDisruption
+                  ? `${activeDisruption.severity || "MEDIUM"} · ${
+                      activeDisruption.delay_minutes || 0
+                    } min delay`
+                  : "None active",
+              ],
+              ["Affected", `${downstreamBookings.length} downstream`],
+              ["Recovery", `${plans.length} plan${plans.length === 1 ? "" : "s"}`],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  padding: "11px 0",
+                  borderBottom: "1px solid #f0f2f6",
+                }}
+              >
+                <span
+                  style={{
+                    display: "block",
+                    color: "#94a3b8",
+                    fontSize: "9px",
+                    fontWeight: 800,
+                    letterSpacing: "1px",
+                  }}
+                >
+                  {label}
+                </span>
+                <strong
+                  style={{
+                    display: "block",
+                    marginTop: "4px",
+                    fontSize: "11px",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {value}
+                </strong>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              background: "#f5f9ff",
+              border: "1px solid #dbeafe",
+              borderRadius: "14px",
+              padding: "16px",
+            }}
+          >
+            <span className="small-label">WHAT IT CAN EXPLAIN</span>
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                marginTop: "10px",
+              }}
+            >
+              {[
+                "Why the disruption happened",
+                "Which bookings are affected",
+                "How the dependency cascade works",
+                "What recovery options change",
+              ].map((item) => (
+                <div
+                  key={item}
+                  style={{
+                    display: "flex",
+                    gap: "7px",
+                    color: "#475569",
+                    fontSize: "10px",
+                    lineHeight: 1.35,
+                  }}
+                >
+                  <span style={{ color: "#2563eb", fontWeight: 800 }}>✓</span>
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e7ebf2",
+              borderRadius: "14px",
+              padding: "16px",
+            }}
+          >
+            <span className="small-label">SAFETY CHECK</span>
+            <p
+              style={{
+                margin: "9px 0 0",
+                color: "#64748b",
+                fontSize: "10px",
+                lineHeight: 1.5,
+              }}
+            >
+              The assistant explains data produced by TravelRescue's
+              monitoring, dependency and recovery engines. Booking changes
+              still require traveler approval.
+            </p>
+          </div>
+        </aside>
+      </section>
+    </div>
+  );
+}
+
+/* =========================================================
+   SETTINGS
+========================================================= */
+
+function SettingsPage({
+  currentUser,
+  onOpenDashboard,
+  onLogout,
+}) {
+  const [notifications, setNotifications] = useState(true);
+  const [liveAlerts, setLiveAlerts] = useState(true);
+  const [recoveryApproval, setRecoveryApproval] = useState(true);
+  const [flexibility, setFlexibility] = useState("MODERATE");
+  const [maxExtraCost, setMaxExtraCost] = useState("5000");
+  const [saved, setSaved] = useState(false);
+
+  function savePreferences() {
+    const preferences = {
+      notifications,
+      liveAlerts,
+      recoveryApproval,
+      flexibility,
+      maxExtraCost,
+    };
+
+    localStorage.setItem(
+      "travelrescue_preferences",
+      JSON.stringify(preferences)
+    );
+
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2200);
+  }
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("travelrescue_preferences");
+      if (!stored) return;
+
+      const preferences = JSON.parse(stored);
+
+      if (typeof preferences.notifications === "boolean") {
+        setNotifications(preferences.notifications);
+      }
+      if (typeof preferences.liveAlerts === "boolean") {
+        setLiveAlerts(preferences.liveAlerts);
+      }
+      if (typeof preferences.recoveryApproval === "boolean") {
+        setRecoveryApproval(preferences.recoveryApproval);
+      }
+      if (preferences.flexibility) {
+        setFlexibility(preferences.flexibility);
+      }
+      if (preferences.maxExtraCost != null) {
+        setMaxExtraCost(String(preferences.maxExtraCost));
+      }
+    } catch {
+      // Ignore malformed local preference data.
+    }
+  }, []);
+
+  const userName =
+    currentUser?.name ||
+    currentUser?.username ||
+    "TravelRescue traveler";
+
+  const userEmail = currentUser?.email || "Account email";
+
+  function Toggle({ checked, onChange }) {
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        style={{
+          width: "42px",
+          height: "24px",
+          padding: "3px",
+          border: "none",
+          borderRadius: "999px",
+          background: checked ? "#2563eb" : "#cbd5e1",
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: checked ? "flex-end" : "flex-start",
+          alignItems: "center",
+          flexShrink: 0,
+          transition: "all .15s ease",
+        }}
+      >
+        <span
+          style={{
+            width: "18px",
+            height: "18px",
+            borderRadius: "50%",
+            background: "#fff",
+            boxShadow: "0 1px 3px rgba(15,23,42,.2)",
+          }}
+        />
+      </button>
+    );
+  }
+
+  function SettingRow({
+    title,
+    description,
+    children,
+  }) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "18px",
+          padding: "15px 0",
+          borderBottom: "1px solid #edf1f6",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <strong
+            style={{
+              display: "block",
+              fontSize: "12px",
+              color: "#1e293b",
+            }}
+          >
+            {title}
+          </strong>
+          <span
+            style={{
+              display: "block",
+              marginTop: "4px",
+              color: "#64748b",
+              fontSize: "10px",
+              lineHeight: 1.45,
+              maxWidth: "580px",
+            }}
+          >
+            {description}
+          </span>
+        </div>
+
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "16px",
+      }}
+    >
+      <section
+        style={{
+          background: "#fff",
+          border: "1px solid #e7ebf2",
+          borderRadius: "16px",
+          padding: "22px 24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "18px",
+        }}
+      >
+        <div>
+          <span className="small-label">ACCOUNT & PREFERENCES</span>
+          <h1 style={{ margin: "5px 0", fontSize: "28px" }}>Settings</h1>
+          <p style={{ margin: 0, color: "#64748b", fontSize: "13px" }}>
+            Control how TravelRescue monitors your journey and handles
+            recovery decisions.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+          <button
+            className="view-all-button"
+            onClick={savePreferences}
+          >
+            {saved ? "✓ Saved" : "Save preferences"}
+          </button>
+          <button
+            className="return-dashboard-button"
+            onClick={onOpenDashboard}
+          >
+            ← Dashboard
+          </button>
+        </div>
+      </section>
+
+      {saved && (
+        <div
+          style={{
+            background: "#ecfdf5",
+            border: "1px solid #bbf7d0",
+            color: "#166534",
+            borderRadius: "11px",
+            padding: "10px 13px",
+            fontSize: "11px",
+            fontWeight: 700,
+          }}
+        >
+          Travel preferences saved on this device.
+        </div>
+      )}
+
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.25fr) minmax(280px, .75fr)",
+          gap: "16px",
+          alignItems: "start",
+        }}
+      >
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e7ebf2",
+            borderRadius: "16px",
+            padding: "20px",
+          }}
+        >
+          <span className="small-label">TRAVEL PREFERENCES</span>
+          <h2 style={{ margin: "5px 0 2px", fontSize: "18px" }}>
+            Recovery behavior
+          </h2>
+          <p
+            style={{
+              margin: 0,
+              color: "#64748b",
+              fontSize: "11px",
+            }}
+          >
+            These preferences can be used by the recovery optimizer when
+            evaluating alternative itineraries.
+          </p>
+
+          <SettingRow
+            title="Recovery approval required"
+            description="Keep traveler approval before any recovery plan is applied."
+          >
+            <Toggle
+              checked={recoveryApproval}
+              onChange={setRecoveryApproval}
+            />
+          </SettingRow>
+
+          <SettingRow
+            title="Travel flexibility"
+            description="How much schedule movement the recovery engine may consider."
+          >
+            <select
+              value={flexibility}
+              onChange={(event) => setFlexibility(event.target.value)}
+              style={{
+                height: "36px",
+                minWidth: "125px",
+                border: "1px solid #dbe3ef",
+                borderRadius: "8px",
+                background: "#fbfcfe",
+                padding: "0 9px",
+                fontSize: "11px",
+                color: "#334155",
+              }}
+            >
+              <option value="LOW">Low</option>
+              <option value="MODERATE">Moderate</option>
+              <option value="HIGH">High</option>
+            </select>
+          </SettingRow>
+
+          <SettingRow
+            title="Maximum extra cost"
+            description="Preferred ceiling for additional recovery cost."
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <span
+                style={{
+                  color: "#64748b",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                }}
+              >
+                ₹
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="500"
+                value={maxExtraCost}
+                onChange={(event) => setMaxExtraCost(event.target.value)}
+                style={{
+                  width: "105px",
+                  height: "36px",
+                  boxSizing: "border-box",
+                  border: "1px solid #dbe3ef",
+                  borderRadius: "8px",
+                  background: "#fbfcfe",
+                  padding: "0 9px",
+                  fontSize: "11px",
+                }}
+              />
+            </div>
+          </SettingRow>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "12px",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e7ebf2",
+              borderRadius: "16px",
+              padding: "20px",
+            }}
+          >
+            <span className="small-label">NOTIFICATIONS</span>
+
+            <SettingRow
+              title="TravelRescue notifications"
+              description="Receive important trip and recovery updates."
+            >
+              <Toggle
+                checked={notifications}
+                onChange={setNotifications}
+              />
+            </SettingRow>
+
+            <SettingRow
+              title="Live disruption alerts"
+              description="Surface provider monitoring changes as they are detected."
+            >
+              <Toggle
+                checked={liveAlerts}
+                onChange={setLiveAlerts}
+              />
+            </SettingRow>
+          </div>
+
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e7ebf2",
+              borderRadius: "16px",
+              padding: "20px",
+            }}
+          >
+            <span className="small-label">PROFILE</span>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                marginTop: "12px",
+              }}
+            >
+              <div
+                style={{
+                  width: "44px",
+                  height: "44px",
+                  borderRadius: "13px",
+                  background: "#eef4ff",
+                  color: "#2563eb",
+                  display: "grid",
+                  placeItems: "center",
+                  fontWeight: 800,
+                  fontSize: "16px",
+                }}
+              >
+                {String(userName).charAt(0).toUpperCase()}
+              </div>
+
+              <div>
+                <strong
+                  style={{
+                    display: "block",
+                    fontSize: "13px",
+                  }}
+                >
+                  {userName}
+                </strong>
+                <span
+                  style={{
+                    display: "block",
+                    marginTop: "3px",
+                    color: "#64748b",
+                    fontSize: "10px",
+                  }}
+                >
+                  {userEmail}
+                </span>
+                <span
+                  style={{
+                    display: "inline-block",
+                    marginTop: "6px",
+                    padding: "4px 7px",
+                    borderRadius: "6px",
+                    background: "#f1f5f9",
+                    color: "#64748b",
+                    fontSize: "9px",
+                    fontWeight: 800,
+                  }}
+                >
+                  {currentUser?.role || "TRAVELER"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#f8fafc",
+              border: "1px solid #e7ebf2",
+              borderRadius: "16px",
+              padding: "18px",
+            }}
+          >
+            <span className="small-label">SYSTEM</span>
+
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                marginTop: "11px",
+              }}
+            >
+              {[
+                ["Monitoring", "Operational"],
+                ["Dependency engine", "Connected"],
+                ["Recovery engine", "Connected"],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    fontSize: "10px",
+                  }}
+                >
+                  <span style={{ color: "#64748b" }}>{label}</span>
+                  <span
+                    style={{
+                      color: "#15803d",
+                      fontWeight: 700,
+                    }}
+                  >
+                    ● {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        style={{
+          background: "#fff",
+          border: "1px solid #e7ebf2",
+          borderRadius: "16px",
+          padding: "18px 20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "18px",
+        }}
+      >
+        <div>
+          <span className="small-label">SESSION</span>
+          <strong
+            style={{
+              display: "block",
+              marginTop: "5px",
+              fontSize: "12px",
+            }}
+          >
+            Sign out of TravelRescue
+          </strong>
+          <span
+            style={{
+              display: "block",
+              marginTop: "3px",
+              color: "#64748b",
+              fontSize: "10px",
+            }}
+          >
+            Your saved preferences remain on this device.
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onLogout}
+          style={{
+            height: "36px",
+            padding: "0 13px",
+            borderRadius: "8px",
+            border: "1px solid #fecaca",
+            background: "#fff",
+            color: "#b91c1c",
+            fontSize: "11px",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          Sign out
+        </button>
+      </section>
     </div>
   );
 }

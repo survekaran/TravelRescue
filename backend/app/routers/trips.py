@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.trip import Trip
+from app.models.booking import Booking
+from app.models.disruption import Disruption
 from app.models.user import User
 from app.schemas.trip import TripCreate, TripResponse
 
@@ -24,7 +26,6 @@ def create_trip(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     if data.end_date <= data.start_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -57,7 +58,6 @@ def get_my_trips(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     trips = db.query(Trip).filter(
         Trip.user_id == current_user.id
     ).order_by(
@@ -76,7 +76,6 @@ def get_trip(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     trip = db.query(Trip).filter(
         Trip.id == trip_id,
         Trip.user_id == current_user.id
@@ -91,15 +90,12 @@ def get_trip(
     return trip
 
 
-@router.delete(
-    "/{trip_id}"
-)
+@router.delete("/{trip_id}")
 def delete_trip(
     trip_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-
     trip = db.query(Trip).filter(
         Trip.id == trip_id,
         Trip.user_id == current_user.id
@@ -110,6 +106,17 @@ def delete_trip(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trip not found"
         )
+
+    # A trip can have disruptions that reference bookings, and bookings that
+    # reference the trip. Delete children first so PostgreSQL foreign-key
+    # constraints do not turn a valid delete into a 500/"Failed to fetch".
+    db.query(Disruption).filter(
+        Disruption.trip_id == trip_id
+    ).delete(synchronize_session=False)
+
+    db.query(Booking).filter(
+        Booking.trip_id == trip_id
+    ).delete(synchronize_session=False)
 
     db.delete(trip)
     db.commit()
