@@ -6,7 +6,7 @@ import "./App.css";
 // Vite exposes only variables prefixed with VITE_; this one is deliberately
 // public and must contain only the API's public origin.
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
-const TRIP_ID = 3;
+const TRIP_ID = 1;
 const STORAGE_KEY = "travelrescue_auth";
 
 function getStoredAuth() {
